@@ -85,6 +85,23 @@ let better acc = function None -> acc | Some x -> Some x
 
 let longest_prefix str t = fold_over_path better str None t
 
+let rec longest_prefix_with_boundary str boundary = function
+  | Node (p, v, _) when p = str ->
+      v
+  | Node (p, v, ns) when is_prefix p str -> (
+      let remaining = sub str p in
+      match choose remaining ns with
+      | Some (n, _) ->
+          longest_prefix_with_boundary remaining boundary n
+      | None ->
+          if remaining.[0] = boundary then
+            v
+          else
+            None
+    )
+  | Node (p, _, _) ->
+      None
+
 let fold f acc t =
   let rec inner p acc = function
     | Node (p', v, ns) ->

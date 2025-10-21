@@ -523,11 +523,16 @@ let handle_one (x : 'a Server.t) ss context req =
       with Not_found -> raise Method_not_implemented
     in
     let empty = TE.empty () in
-    let te =
-      Option.value ~default:empty
-        (Radix_tree.longest_prefix req.Request.path method_map)
+    let te_option = Radix_tree.longest_prefix req.Request.path method_map in
+    let te_new_option =
+      Radix_tree.longest_prefix_with_boundary req.Request.path '/' method_map
     in
     let@ _ = Tracing.with_child_trace span ~name:"handler" in
+    D.debug "Longest_prefix matched %s"
+      (match te_option with Some _ -> "something" | None -> "nothing") ;
+    D.debug "Longest_prefix_with_boundary matched handler %s"
+      (match te_new_option with Some _ -> "something" | None -> "nothing") ;
+    let te = Option.value ~default:empty te_option in
     te.TE.handler req ss context ;
     finished := req.Request.close ;
     Stats.update te.TE.stats te.TE.stats_m req ;

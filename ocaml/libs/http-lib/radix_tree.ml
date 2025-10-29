@@ -85,6 +85,60 @@ let better acc = function None -> acc | Some x -> Some x
 
 let longest_prefix str t = fold_over_path better str None t
 
+let longest_prefix_index str t =
+  let rec helper str acc = function
+    | Node (p, v, _) when p = str ->
+        (v, acc ^ p)
+    | Node (p, v, ns) when is_prefix p str -> (
+        let remaining = sub str p in
+        match choose remaining ns with
+        | Some (n, _) ->
+            helper remaining (acc ^ p) n
+        | None ->
+            (v, acc ^ p)
+      )
+    | _ ->
+        (None, "")
+  in
+  match helper str "" t with Some v, acc -> Some (v, acc) | None, _ -> None
+
+let rec longest_prefix_with_boundary str boundary = function
+  | Node (p, v, _) when p = str ->
+      v
+  | Node (p, v, ns) when is_prefix p str -> (
+      let remaining = sub str p in
+      match choose remaining ns with
+      | Some (n, _) ->
+          longest_prefix_with_boundary remaining boundary n
+      | None ->
+          if remaining.[0] = boundary then
+            v
+          else
+            None
+    )
+  | Node (p, _, _) ->
+      None
+
+let rec longest_prefix_with_boundary_index str boundary tree =
+  let rec helper str acc = function
+    | Node (p, v, _) when p = str ->
+        (v, acc ^ str)
+    | Node (p, v, ns) when is_prefix p str -> (
+        let remaining = sub str p in
+        match choose remaining ns with
+        | Some (n, _) ->
+            helper remaining (acc ^ p) n
+        | None ->
+            if remaining.[0] = boundary then
+              (v, acc ^ p)
+            else
+              (None, "")
+      )
+    | Node (p, _, _) ->
+        (None, "")
+  in
+  match helper str "" tree with Some x, s -> Some (x, s) | None, _ -> None
+
 let fold f acc t =
   let rec inner p acc = function
     | Node (p', v, ns) ->

@@ -17,6 +17,17 @@ val longest_prefix : string -> 'a t -> 'a option
     the longest prefix with [key] and returns the associated
     value. *)
 
+val longest_prefix_index : string -> 'a t -> ('a * string) option
+
+val longest_prefix_with_boundary : string -> char -> 'a t -> 'a option
+(** [longest_prefix_with_boundary key boundary tree] finds
+    the key [k] which shares the longest prefix with [key],
+    and returns the associated value if the keys are an exact
+    match, or if the prefix is terminated by [boundary] *)
+
+val longest_prefix_with_boundary_index :
+  string -> char -> 'a t -> ('a * string) option
+
 val fold : (string -> 'a -> 'b -> 'b) -> 'b -> 'a t -> 'b
 (** [fold f initial t] folds [f] over all bindings in [t] *)
 

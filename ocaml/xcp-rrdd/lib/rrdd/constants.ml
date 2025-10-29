@@ -19,17 +19,9 @@ let get_vm_rrd = "vm_rrd"
 
 let get_vm_rrd_uri = "/" ^ get_vm_rrd
 
-(* XenCenter was using this URI until build 8460 *)
-(* This is here for compatibility reasons only *)
-let get_vm_rrd_uri_compat = "/vm_rrds"
-
 let get_host_rrd = "host_rrd"
 
 let get_host_rrd_uri = "/" ^ get_host_rrd
-
-(* XenCenter was using this URI until build 8460 *)
-(* This is here for compatibility reasons only *)
-let get_host_rrd_uri_compat = "/host_rrds"
 
 let get_sr_rrd = "sr_rrd"
 

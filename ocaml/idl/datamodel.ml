@@ -11148,6 +11148,7 @@ let http_actions =
 let public_http_actions_with_no_rbac_check =
   [
     "post_root"
+  ; "post_RPC2"
   ; (* XMLRPC (API) calls -> checks RBAC internally *)
     "post_cli"
   ; (* CLI commands -> calls XMLRPC *)

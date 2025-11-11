@@ -53,6 +53,13 @@
  (depends xapi-log xapi-stdext-unix))
 
 (package
+ (name token-bucket)
+ (synopsis "Simple token bucket implementation")
+ (depends
+   (ocaml (>= 4.12))
+   xapi-log xapi-stdext-unix))
+
+(package
  (name xml-light2))
 
 (package

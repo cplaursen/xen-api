@@ -1,0 +1,12 @@
+(library
+ (name token_bucket)
+ (modules token_bucket)
+ (public_name token-bucket)
+ (libraries threads.posix mtime mtime.clock.os xapi-log xapi-stdext-threads clock)
+)
+
+(test
+ (name test_token_bucket)
+ (modules test_token_bucket)
+ (package token-bucket)
+ (libraries token_bucket alcotest mtime mtime.clock.os fmt xapi-log threads.posix))

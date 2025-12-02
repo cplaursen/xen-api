@@ -13,7 +13,48 @@
  *)
 module D = Debug.Make (struct let name = "xapi_rate_limit" end)
 
-let bucket_table = Rate_limit.Bucket_table.create ()
+open Rate_limit
+
+let bucket_table = Bucket_table.create ()
+
+let create ~__context ~client_id ~burst_size ~fill_rate =
+  if Bucket_table.mem bucket_table ~user_agent:client_id then
+    raise
+      Api_errors.(
+        Server_error
+          ( map_duplicate_key
+          , ["client_id"; client_id; "client_id already registered"]
+          )
+      ) ;
+  let uuid = Uuidx.make () in
+  let ref = Ref.make () in
+  let add_bucket_succeeded =
+    Bucket_table.add_bucket bucket_table ~user_agent:client_id ~burst_size
+      ~fill_rate
+  in
+  match add_bucket_succeeded with
+  | true ->
+      Db.Rate_limit.create ~__context ~ref ~uuid:(Uuidx.to_string uuid)
+        ~client_id ~burst_size ~fill_rate ;
+      ref
+  | false ->
+      raise
+        Api_errors.(
+          Server_error
+            ( invalid_value
+            , [
+                "fill_rate"
+              ; string_of_float fill_rate
+              ; "Fill rate cannot be 0 or negative"
+              ]
+            )
+        )
+
+let destroy ~__context ~self =
+  Db.Rate_limit.destroy ~__context ~self ;
+  let record = Db.Rate_limit.get_record ~__context ~self in
+  Bucket_table.delete_bucket bucket_table
+    ~user_agent:record.rate_limit_client_id
 
 let register_xapi_globs () =
   let configs = !Xapi_globs.rate_limited_clients in

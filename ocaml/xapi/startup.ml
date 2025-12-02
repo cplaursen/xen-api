@@ -37,25 +37,21 @@ let thread_exn_wrapper thread_name f =
 let run ~__context tasks =
   let task_id = Context.get_task_id __context in
   let dummy_task = Ref.is_dummy task_id in
-  let get_flags_of_list flags =
-    let only_master = ref false
-    and only_slave = ref false
-    and exnraise = ref true
-    and onthread = ref false in
-    List.iter
-      (fun flag ->
+  (* Returns tuple of (only_master, only_slave, exnraise, onthread) *)
+  let get_flags_of_list =
+    List.fold_left
+      (fun (only_master, only_slave, exnraise, onthread) flag ->
         match flag with
         | OnlyMaster ->
-            only_master := true
+            (true, only_slave, exnraise, onthread)
         | OnlySlave ->
-            only_slave := true
+            (only_master, true, exnraise, onthread)
         | NoExnRaising ->
-            exnraise := false
+            (only_master, only_slave, false, onthread)
         | OnThread ->
-            onthread := true
+            (only_master, only_slave, exnraise, true)
       )
-      flags ;
-    (!only_master, !only_slave, !exnraise, !onthread)
+      (false, false, true, false)
   in
   (* get pool role status *)
   let is_master = Pool_role.is_master () in

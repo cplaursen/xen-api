@@ -16,16 +16,22 @@ type t = (string, Token_bucket.t) Hashtbl.t
 
 let create () = Hashtbl.create 16
 
+(* TODO: Indicate failure reason - did we get invalid config or try to add an
+   already present user_agent? *)
 let add_bucket table ~user_agent ~burst_size ~fill_rate =
-  let bucket_option = Token_bucket.create ~burst_size ~fill_rate in
-  match bucket_option with
-  | Some bucket ->
-      Hashtbl.replace table user_agent bucket ;
-      true
-  | None ->
-      false
+  if Hashtbl.mem table user_agent then
+    false
+  else
+    match Token_bucket.create ~burst_size ~fill_rate with
+    | Some bucket ->
+        Hashtbl.add table user_agent bucket ;
+        true
+    | None ->
+        false
 
 let delete_bucket table ~user_agent = Hashtbl.remove table user_agent
+
+let mem table ~user_agent = Hashtbl.mem table user_agent
 
 let try_consume table ~user_agent amount =
   match Hashtbl.find_opt table user_agent with

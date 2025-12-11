@@ -122,6 +122,12 @@ let peek t ~user_agent =
     (fun contents -> Token_bucket.peek contents.bucket)
     (StringMap.find_opt user_agent map)
 
+let process_bucket {bucket; process_queue; _} amount callback =
+  if Queue.is_empty process_queue && Token_bucket.consume bucket amount then
+    callback ()
+  else
+    Queue.add (amount, callback) process_queue
+
 (* The callback should return quickly - if it is a longer task it is
    responsible for creating a thread to do the task *)
 let submit t ~user_agent ~callback amount =
@@ -130,38 +136,39 @@ let submit t ~user_agent ~callback amount =
   | None ->
       D.debug "Found no rate limited user_agent for %s, returning" user_agent ;
       callback ()
-  | Some {bucket; process_queue; process_queue_lock; worker_thread_cond; _} ->
+  | Some ({process_queue_lock; worker_thread_cond; _} as rate_limit_data) ->
       with_lock process_queue_lock (fun () ->
-          if Queue.is_empty process_queue && Token_bucket.consume bucket amount
-          then (
-            D.debug
-              "Processing callback immediately: consumed %f tokens in call \
-               from user_agent %s"
-              amount user_agent ;
-            callback ()
-          ) else (
-            D.debug "Adding callback for %f tokens from user_agent %s to queue"
-              amount user_agent ;
-            Queue.add (amount, callback) process_queue ;
-            Condition.signal worker_thread_cond
-          )
+          process_bucket rate_limit_data amount callback ;
+          Condition.signal worker_thread_cond
       )
 
 let submit_sync t ~user_agent ~callback amount =
-  let result = ref None in
-  let mutex = Mutex.create () in
-  let condition = Condition.create () in
-  let wrapped_callback () =
-    let r = callback () in
-    Mutex.lock mutex ;
-    result := Some r ;
-    Condition.signal condition ;
-    Mutex.unlock mutex
-  in
-  submit t ~user_agent ~callback:wrapped_callback amount ;
-  Mutex.lock mutex ;
-  while Option.is_none !result do
-    Condition.wait condition mutex
-  done ;
-  Mutex.unlock mutex ;
-  Option.get !result
+  let map = Atomic.get t in
+  match StringMap.find_opt user_agent map with
+  | None ->
+      callback ()
+  | Some bucket_data ->
+      let channel_opt =
+        with_lock bucket_data.process_queue_lock (fun () ->
+            if
+              Queue.is_empty bucket_data.process_queue
+              && Token_bucket.consume bucket_data.bucket amount
+            then
+              None (* Can run callback immediately after releasing lock *)
+            else
+              (* Rate limited, need to retrieve function result via channel *)
+              let channel = Event.new_channel () in
+              let wrapped_callback () =
+                let value = callback () in
+                Event.sync (Event.send channel value)
+              in
+              Queue.add (amount, wrapped_callback) bucket_data.process_queue ;
+              Condition.signal bucket_data.worker_thread_cond ;
+              Some channel
+        )
+      in
+      match channel_opt with
+      | None ->
+          callback ()
+      | Some channel ->
+          Event.sync (Event.receive channel)

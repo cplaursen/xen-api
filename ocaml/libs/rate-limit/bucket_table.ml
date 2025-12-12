@@ -147,7 +147,7 @@ let submit_sync t ~user_agent ~callback amount =
   match StringMap.find_opt user_agent map with
   | None ->
       callback ()
-  | Some bucket_data ->
+  | Some bucket_data -> (
       let channel_opt =
         with_lock bucket_data.process_queue_lock (fun () ->
             if
@@ -172,3 +172,4 @@ let submit_sync t ~user_agent ~callback amount =
           callback ()
       | Some channel ->
           Event.sync (Event.receive channel)
+    )

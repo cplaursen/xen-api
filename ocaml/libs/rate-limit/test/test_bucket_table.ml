@@ -234,14 +234,11 @@ let test_submit_sync_with_queued_items () =
   (* Now submit_sync should queue behind the async items *)
   let result =
     Bucket_table.submit_sync table ~user_agent:"agent1"
-      ~callback:(fun () ->
-        record_execution 3 ;
-        "sync_result"
-      )
+      ~callback:(fun () -> record_execution 3 ; "sync_result")
       1.0
   in
-  Alcotest.(check string) "submit_sync returns correct result" "sync_result"
-    result ;
+  Alcotest.(check string)
+    "submit_sync returns correct result" "sync_result" result ;
   let order = List.rev !execution_order in
   Alcotest.(check (list int))
     "submit_sync executes after queued items" [1; 2; 3] order

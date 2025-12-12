@@ -122,12 +122,6 @@ let peek t ~user_agent =
     (fun contents -> Token_bucket.peek contents.bucket)
     (StringMap.find_opt user_agent map)
 
-let process_bucket {bucket; process_queue; _} amount callback =
-  if Queue.is_empty process_queue && Token_bucket.consume bucket amount then
-    callback ()
-  else
-    Queue.add (amount, callback) process_queue
-
 (* The callback should return quickly - if it is a longer task it is
    responsible for creating a thread to do the task *)
 let submit t ~user_agent ~callback amount =
@@ -136,11 +130,20 @@ let submit t ~user_agent ~callback amount =
   | None ->
       D.debug "Found no rate limited user_agent for %s, returning" user_agent ;
       callback ()
-  | Some ({process_queue_lock; worker_thread_cond; _} as rate_limit_data) ->
-      with_lock process_queue_lock (fun () ->
-          process_bucket rate_limit_data amount callback ;
-          Condition.signal worker_thread_cond
-      )
+  | Some {bucket; process_queue; process_queue_lock; worker_thread_cond; _} ->
+      let run_immediately =
+        with_lock process_queue_lock (fun () ->
+            let immediate =
+              Queue.is_empty process_queue
+              && Token_bucket.consume bucket amount
+            in
+            if not immediate then
+              Queue.add (amount, callback) process_queue ;
+            Condition.signal worker_thread_cond ;
+            immediate
+        )
+      in
+      if run_immediately then callback ()
 
 let submit_sync t ~user_agent ~callback amount =
   let map = Atomic.get t in

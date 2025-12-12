@@ -134,8 +134,7 @@ let submit t ~user_agent ~callback amount =
       let run_immediately =
         with_lock process_queue_lock (fun () ->
             let immediate =
-              Queue.is_empty process_queue
-              && Token_bucket.consume bucket amount
+              Queue.is_empty process_queue && Token_bucket.consume bucket amount
             in
             if not immediate then
               Queue.add (amount, callback) process_queue ;

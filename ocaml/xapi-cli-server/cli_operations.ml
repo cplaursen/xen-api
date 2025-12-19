@@ -1428,8 +1428,8 @@ let message_destroy_all (_ : printer) rpc session_id params =
   let before =
     try
       Option.map Date.of_iso8601 before_str
-      (* Default value is Ptime.max - everything is before it *)
       |> Option.value ~default:(Date.of_ptime Ptime.max)
+      (* Default value is Ptime.max - everything is before it *)
     with _ -> fail "invalid timestamp format for 'before' (expected RFC3339)"
   in
   let after =

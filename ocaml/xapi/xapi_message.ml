@@ -732,7 +732,7 @@ let get_all_records ~__context = get_real message_dir (fun _ -> true) 0.0
 
 let destroy_all ~__context ~before ~after ~priority =
   let filter_timestamp ts =
-    Date.is_later ts ~than:before && Date.is_earlier ts ~than:after
+    Date.is_earlier ts ~than:before && Date.is_later ts ~than:after
   in
   let priority_filter =
     (* Default priority is -1, which stands for any priority *)

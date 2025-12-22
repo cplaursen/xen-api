@@ -1463,21 +1463,32 @@ let message_destroy_all (_ : printer) rpc session_id params =
   let after_str = List.assoc_opt "after" params in
   let priority_str = List.assoc_opt "priority" params in
   let before =
-    try
-      Option.map Date.of_iso8601 before_str
-      |> Option.value ~default:(Date.of_ptime Ptime.max)
-      (* Default value is Ptime.max - everything is before it *)
-    with _ -> fail "invalid timestamp format for 'before' (expected RFC3339)"
+    try Option.map Date.of_iso8601 before_str
+    with _ ->
+      fail
+        "invalid timestamp format for 'before' (expected RFC3339, e.g. \
+         2025-01-01T00:00:00Z)"
   in
   let after =
-    try Option.map Date.of_iso8601 after_str |> Option.value ~default:Date.epoch
-    with _ -> fail "Invalid timestamp format for 'after' (expected RFC3339)"
+    try Option.map Date.of_iso8601 after_str
+    with _ ->
+      fail
+        "Invalid timestamp format for 'after' (expected RFC3339, e.g. \
+         2025-01-01T00:00:00Z)"
   in
   let priority =
-    try Option.map Int64.of_string priority_str |> Option.value ~default:(-1L)
+    try Option.map Int64.of_string priority_str
     with _ -> fail "Invalid priority format (expected integer)"
   in
-  Client.Message.destroy_all ~rpc ~session_id ~before ~after ~priority
+  let filters =
+    List.filter_map Fun.id
+      [
+        Option.map (fun b -> ("before", Date.to_rfc3339 b)) before
+      ; Option.map (fun a -> ("after", Date.to_rfc3339 a)) after
+      ; Option.map (fun p -> ("priority", Int64.to_string p)) priority
+      ]
+  in
+  Client.Message.destroy_all ~rpc ~session_id ~filters
 
 (* Pool operations *)
 

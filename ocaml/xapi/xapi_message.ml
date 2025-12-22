@@ -746,13 +746,24 @@ let get_record ~__context ~self =
 
 let get_all_records ~__context = get_real message_dir (fun _ -> true) 0.0
 
-let destroy_all ~__context ~before ~after ~priority =
-  let filter_timestamp ts =
-    Date.is_earlier ts ~than:before && Date.is_later ts ~than:after
+let destroy_all ~__context ~filters =
+  let before_opt =
+    Option.map Date.of_iso8601 (List.assoc_opt "before" filters)
   in
-  let priority_filter =
-    (* Default priority is -1, which stands for any priority *)
-    if priority = -1L then fun _ -> true else fun p -> p = priority
+  let after_opt = Option.map Date.of_iso8601 (List.assoc_opt "after" filters) in
+  let priority_opt =
+    Option.map Int64.of_string (List.assoc_opt "priority" filters)
+  in
+  let filter_timestamp ts =
+    Option.fold ~none:true
+      ~some:(fun before -> Date.is_earlier ts ~than:before)
+      before_opt
+    && Option.fold ~none:true
+         ~some:(fun after -> Date.is_later ts ~than:after)
+         after_opt
+  in
+  let priority_filter p =
+    Option.fold ~none:true ~some:(fun priority -> p = priority) priority_opt
   in
   let message_filter msg =
     filter_timestamp msg.API.message_timestamp

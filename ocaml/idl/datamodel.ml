@@ -8927,35 +8927,16 @@ module Message = struct
 
   let destroy_all =
     call ~name:"destroy_all" ~lifecycle:[]
-      ~versioned_params:
+      ~params:
         [
-          {
-            param_type= DateTime
-          ; param_name= "before"
-          ; param_doc=
-              "Cutoff time for destroyed messages - only destroy messages with \
-               an earlier timestamp. When no timezone is specified UTC is \
-               assumed."
-          ; param_release= numbered_release "25.39.0-next"
-          ; param_default= Some (VDateTime (Date.of_ptime Ptime.max))
-          }
-        ; {
-            param_type= DateTime
-          ; param_name= "after"
-          ; param_doc=
-              "Cutoff time for destroyed messages - only destroy messages with \
-               a later timestamp. When no timezone is specified UTC is \
-               assumed."
-          ; param_release= numbered_release "25.39.0-next"
-          ; param_default= Some (VDateTime Date.epoch)
-          }
-        ; {
-            param_type= Int
-          ; param_name= "priority"
-          ; param_doc= "Priority of messages to be destroyed"
-          ; param_release= numbered_release "25.39.0-next"
-          ; param_default= Some (VInt (-1L))
-          }
+          ( Map (String, String)
+          , "filters"
+          , "Optional filters identifying messages to destroy: before (RFC3339 \
+             DateTime, destroy messages dated before this timestamp), after \
+             (RFC3339 DateTime, destroy messages dated after this timestamp), \
+             and priority (int, only destroy messages with this priority). If \
+             no timezone is specified, UTC is assumed."
+          )
         ]
       ~allowed_roles:_R_POOL_OP ()
 

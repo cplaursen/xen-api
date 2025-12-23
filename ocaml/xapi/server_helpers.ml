@@ -159,24 +159,43 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
         Tgroup.of_creator (Tgroup.Group.Creator.make ?identity ())
     ) ;
 
-    let sync () =
-      let need_complete = not (Context.forwarded_task __context) in
-      let@ __context = Context.finally_destroy_context ~__context in
-      exec_with_context ~__context ~need_complete ?f_forward:forward_op
-        ~marshaller op_fn
-      |> marshaller
-      |> Rpc.success
+    let with_dispatch_timing f =
+      let start = Unix.gettimeofday () in
+      Fun.protect f ~finally:(fun () ->
+          let duration = Unix.gettimeofday () -. start in
+          debug "dispatch %s took %.6fs" called_fn_name duration
+      )
     in
 
-    let async ~need_complete =
+    let maybe_with_dispatch_timing ~enabled f =
+      if enabled then
+        with_dispatch_timing f
+      else
+        f ()
+    in
+
+    let sync () =
+      with_dispatch_timing (fun () ->
+          let need_complete = not (Context.forwarded_task __context) in
+          let@ __context = Context.finally_destroy_context ~__context in
+          exec_with_context ~__context ~need_complete ?f_forward:forward_op
+            ~marshaller op_fn
+          |> marshaller
+          |> Rpc.success
+      )
+    in
+
+    let async ~need_complete ~timed =
       (* Fork thread in which to execute async call *)
       info "spawning a new thread to handle the current task%s"
         (Context.trackid ~with_brackets:true ~prefix:" " __context) ;
       ignore
         (Thread.create
            (fun () ->
-             exec_with_context ~__context ~need_complete ?f_forward:forward_op
-               ~marshaller op_fn
+             maybe_with_dispatch_timing ~enabled:timed (fun () ->
+                 exec_with_context ~__context ~need_complete
+                   ?f_forward:forward_op ~marshaller op_fn
+             )
            )
            ()
         ) ;
@@ -188,9 +207,9 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
         sync ()
     | `Async ->
         let need_complete = not (Context.forwarded_task __context) in
-        async ~need_complete
+        async ~need_complete ~timed:true
     | `InternalAsync ->
-        async ~need_complete:true
+        async ~need_complete:true ~timed:false
 
 (* regardless of forwarding, we are expected to complete the task *)
 

@@ -183,6 +183,7 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
       (* Return task id immediately *)
     in
     let user_agent_option = http_req.user_agent in
+    let host = Option.value http_req.host ~default:"" in
     let peek_result =
       Option.bind user_agent_option (fun user_agent ->
           Rate_limit.Bucket_table.peek Xapi_rate_limit.bucket_table ~user_agent
@@ -207,8 +208,8 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
       | Some tokens -> (
           D.debug
             "Bucket table: Expecting to consume %f tokens from user_agent %s \
-             with available tokens %f in function %s"
-            token_cost user_agent tokens __FUNCTION__ ;
+             and host %s with available tokens %f in function %s"
+            token_cost user_agent host tokens __FUNCTION__ ;
           match sync_ty with
           | `Sync ->
               Rate_limit.Bucket_table.submit_sync Xapi_rate_limit.bucket_table

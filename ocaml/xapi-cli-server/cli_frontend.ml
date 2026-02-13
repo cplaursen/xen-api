@@ -132,7 +132,10 @@ let rec cmdtable_data : (string * cmd_spec) list =
     , {
         reqd= []
       ; optn= ["before"; "after"; "priority"]
-      ; help= "Destroy all existing messages matching the given conditions."
+      ; help=
+          "Destroy all messages matching the given conditions (combined with \
+           logical AND). If no conditions are provided, all messages are \
+           destroyed."
       ; implementation= No_fd Cli_operations.message_destroy_all
       ; flags= []
       }

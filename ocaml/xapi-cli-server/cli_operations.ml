@@ -1477,8 +1477,8 @@ let message_destroy_all (_ : printer) rpc session_id params =
          2025-01-01T00:00:00Z)"
   in
   let priority =
-    try Option.map Int64.of_string priority_str
-    with _ -> fail "Invalid priority format (expected integer)"
+    try Option.map (fun s -> Scanf.sscanf s " %Lu" Fun.id) priority_str
+    with _ -> fail "Invalid priority format (expected positive integer)"
   in
   let filters =
     List.filter_map Fun.id

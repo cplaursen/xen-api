@@ -8934,8 +8934,10 @@ module Message = struct
           , "Optional filters identifying messages to destroy: before (RFC3339 \
              DateTime, destroy messages dated before this timestamp), after \
              (RFC3339 DateTime, destroy messages dated after this timestamp), \
-             and priority (int, only destroy messages with this priority). If \
-             no timezone is specified, UTC is assumed."
+             and priority (int, only destroy messages with this priority). All \
+             provided conditions must be met (logical AND). If no filters are \
+             provided, all messages are destroyed. If no timezone is specified \
+             in a timestamp, UTC is assumed."
           )
         ]
       ~allowed_roles:_R_POOL_OP ()

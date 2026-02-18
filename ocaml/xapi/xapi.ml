@@ -1167,9 +1167,11 @@ let server_init () =
             , []
             , fun () -> report_tls_verification ~__context
             )
-          ; ( "Registering rate limits"
+          ; ( "Registering callers"
             , [Startup.OnlyMaster]
-            , fun () -> Xapi_rate_limit.register ~__context
+            , fun () ->
+                Xapi_caller.register ~__context ;
+                Xapi_rate_limit.register ~__context
             )
           ; ( "Remote requests"
             , [Startup.OnThread]

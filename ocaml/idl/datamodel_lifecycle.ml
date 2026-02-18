@@ -1,6 +1,8 @@
 let prototyped_of_class = function
   | "Rate_limit" ->
-      Some "25.39.0"
+      Some "26.2.0-next"
+  | "Caller" ->
+      Some "26.2.0-next"
   | "Driver_variant" ->
       Some "25.2.0"
   | "Host_driver" ->
@@ -16,15 +18,25 @@ let prototyped_of_class = function
 
 let prototyped_of_field = function
   | "Rate_limit", "fill_rate" ->
-      Some "25.39.0"
+      Some "26.2.0-next"
   | "Rate_limit", "burst_size" ->
-      Some "25.39.0"
-  | "Rate_limit", "host_ip" ->
-      Some "26.1.0"
-  | "Rate_limit", "user_agent" ->
-      Some "26.1.0"
+      Some "26.2.0-next"
+  | "Rate_limit", "caller" ->
+      Some "26.2.0-next"
   | "Rate_limit", "uuid" ->
-      Some "25.39.0"
+      Some "26.2.0-next"
+  | "Caller", "fill_rate" ->
+      Some "26.2.0-next"
+  | "Caller", "burst_size" ->
+      Some "26.2.0-next"
+  | "Caller", "host_ip" ->
+      Some "26.2.0-next"
+  | "Caller", "user_agent" ->
+      Some "26.2.0-next"
+  | "Caller", "name_label" ->
+      Some "26.2.0-next"
+  | "Caller", "uuid" ->
+      Some "26.2.0-next"
   | "Driver_variant", "status" ->
       Some "25.2.0"
   | "Driver_variant", "priority" ->
@@ -210,9 +222,13 @@ let prototyped_of_field = function
 
 let prototyped_of_message = function
   | "Rate_limit", "destroy" ->
-      Some "26.1.0"
+      Some "26.2.0-next"
   | "Rate_limit", "create" ->
-      Some "26.1.0"
+      Some "26.2.0-next"
+  | "Caller", "destroy" ->
+      Some "26.2.0-next"
+  | "Caller", "create" ->
+      Some "26.2.0-next"
   | "Driver_variant", "select" ->
       Some "25.2.0"
   | "Host_driver", "rescan" ->

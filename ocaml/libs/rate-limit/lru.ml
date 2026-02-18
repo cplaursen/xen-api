@@ -250,6 +250,10 @@ module Unsafe = struct
   let trim' t =
     let evict _ x = x in
     drop_while' t ~evict
+
+  let add_trim' t key value =
+    ignore (add' t key value) ;
+    trim' t
 end
 
 (* Functions below are intended to be used by clients of this modules.
@@ -272,6 +276,9 @@ let add t = locked t.lock @@ fun () -> Unsafe.add' t
 let drop_while t = locked t.lock @@ fun () -> Unsafe.drop_while' t
 
 let trim t = locked t.lock @@ fun () -> Unsafe.trim' t
+
+let add_trim t key value =
+  locked t.lock @@ fun () -> Unsafe.add_trim' t key value
 
 (*
  * Copyright (C) 2023 Cloud Software Group

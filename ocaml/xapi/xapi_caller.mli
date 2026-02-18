@@ -12,20 +12,28 @@
  * GNU Lesser General Public License for more details.
  *)
 
+module Key = Client_table.Key
+
+val tracker : Client_tracker.t
+
+val submit_sync : client_id:Key.t -> callback:(unit -> 'a) -> float -> 'a
+
+val submit : client_id:Key.t -> callback:(unit -> unit) -> float -> unit
+
+val get_stats : client_id:Key.t -> Client_tracker.stats option
+
+val get_token_cost : string -> float
+
+val default_token_cost : float
+
 val create :
      __context:Context.t
-  -> caller:[`Caller] Ref.t
-  -> burst_size:float
-  -> fill_rate:float
-  -> [`Rate_limit] Ref.t
-(** [create ~__context ~caller ~burst_size ~fill_rate] creates a rate limiter,
-    attaches it to the matching client in the tracker, and persists a
-    Rate_limit DB record. *)
+  -> name_label:string
+  -> user_agent:string
+  -> host_ip:string
+  -> [`Caller] Ref.t
 
-val destroy : __context:Context.t -> self:[`Rate_limit] API.Ref.t -> unit
-(** [destroy ~__context ~self] removes the rate limiter from the client tracker
-    and destroys the Rate_limit DB record. *)
+val destroy : __context:Context.t -> self:[`Caller] API.Ref.t -> unit
 
 val register : __context:Context.t -> unit
-(** Load Rate_limit records from the database and attach rate limiters to
-    the corresponding clients in the tracker. *)
+(** Load caller records from the database into the client tracker *)

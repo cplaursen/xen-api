@@ -1409,9 +1409,9 @@ let gen_cmds rpc session_id =
           ["uuid"; "vendor-name"; "device-name"; "pci-id"]
           rpc session_id
       )
-    ; Client.Rate_limit.(
-        mk get_all_records_where get_by_uuid rate_limit_record "rate-limit" []
-          ["uuid"; "host-ip"; "user-agent"; "burst-size"; "fill-rate"]
+    ; Client.Caller.(
+        mk get_all_records_where get_by_uuid caller_record "caller" []
+          ["uuid"; "host-ip"; "user-agent"]
           rpc session_id
       )
     ]
@@ -8281,7 +8281,7 @@ module VM_group = struct
     Client.VM_group.destroy ~rpc ~session_id ~self:ref
 end
 
-module Rate_limit = struct
+module Caller = struct
   let create printer rpc session_id params =
     let user_agent = get_param params "user-agent" ~default:"" in
     let host_ip = get_param params "host-ip" ~default:"" in
@@ -8289,12 +8289,31 @@ module Rate_limit = struct
     if user_agent = "" && host_ip = "" then
       failwith "Either user-agent or host-ip must be specified" ;
 
+    let name_label = get_param params "name-label" ~default:"" in
+    let ref =
+      Client.Caller.create ~rpc ~session_id ~name_label ~user_agent ~host_ip
+    in
+    let uuid = Client.Caller.get_uuid ~rpc ~session_id ~self:ref in
+    printer (Cli_printer.PMsg uuid)
+
+  let destroy _printer rpc session_id params =
+    let ref =
+      Client.Caller.get_by_uuid ~rpc ~session_id ~uuid:(List.assoc "uuid" params)
+    in
+    Client.Caller.destroy ~rpc ~session_id ~self:ref
+end
+
+module Rate_limit = struct
+  let create printer rpc session_id params =
+    let caller =
+      Client.Caller.get_by_uuid ~rpc ~session_id
+        ~uuid:(List.assoc "caller-uuid" params)
+    in
     let burst_size = float_of_string (List.assoc "burst-size" params) in
     let fill_rate = float_of_string (List.assoc "fill-rate" params) in
 
     let ref =
-      Client.Rate_limit.create ~rpc ~session_id ~user_agent ~host_ip ~burst_size
-        ~fill_rate
+      Client.Rate_limit.create ~rpc ~session_id ~caller ~burst_size ~fill_rate
     in
     let uuid = Client.Rate_limit.get_uuid ~rpc ~session_id ~self:ref in
     printer (Cli_printer.PMsg uuid)

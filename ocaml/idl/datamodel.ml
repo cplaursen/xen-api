@@ -10545,6 +10545,7 @@ let all_system =
   ; Datamodel_vm_group.t
   ; Datamodel_host_driver.t
   ; Datamodel_driver_variant.t
+  ; Datamodel_caller.t
   ; Datamodel_rate_limit.t
   ]
 
@@ -10797,7 +10798,7 @@ let expose_get_all_messages_for =
   ; _observer
   ; _host_driver
   ; _driver_variant
-  ; _rate_limit
+  ; _caller
   ]
 
 let no_task_id_for = [_task; (* _alert; *) _event]

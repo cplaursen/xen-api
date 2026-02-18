@@ -12,7 +12,6 @@
  * GNU Lesser General Public License for more details.
  *)
 
-open Rate_limit
 module LRU = Lru
 module LL = Lru.LL
 
@@ -106,6 +105,27 @@ let test_lru_lookup =
   List.iter lookup keys ;
   LRU.to_list lru |> List.map fst |> sort = keys
 
+let test_lru_add_trim_growth =
+  QCheck.Test.make ~name:"LRU add_trim respects capacity"
+    QCheck.(pair lru kvs)
+    ~count
+  @@ fun (lru, kvs) ->
+  List.iter (fun (k, v) -> LRU.add_trim lru k v) kvs ;
+  LRU.size lru <= LRU.cap lru
+
+let test_lru_add_trim_equivalent =
+  QCheck.Test.make ~name:"LRU add_trim equivalent to add+trim"
+    QCheck.(pair kvs kvs)
+    ~count
+  @@ fun (init, extra) ->
+  let lru_at = LRU.create (max 1 (List.length init)) in
+  let lru_sep = LRU.create (max 1 (List.length init)) in
+  List.iter (fun (k, v) -> LRU.add_trim lru_at k v) init ;
+  List.iter (fun (k, v) -> add lru_sep (k, v)) init ;
+  List.iter (fun (k, v) -> LRU.add_trim lru_at k v) extra ;
+  List.iter (fun (k, v) -> add lru_sep (k, v)) extra ;
+  LRU.to_list lru_at = LRU.to_list lru_sep
+
 let test =
   [
     QCheck_alcotest.to_alcotest test_ll_from_to_list
@@ -115,6 +135,8 @@ let test =
   ; QCheck_alcotest.to_alcotest test_lru_drop
   ; QCheck_alcotest.to_alcotest test_lru_growth
   ; QCheck_alcotest.to_alcotest test_lru_lookup
+  ; QCheck_alcotest.to_alcotest test_lru_add_trim_growth
+  ; QCheck_alcotest.to_alcotest test_lru_add_trim_equivalent
   ]
 
 let () = Alcotest.run "LRU library" [("LRU tests", test)]

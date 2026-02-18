@@ -1,4 +1,5 @@
 module Rate_limit = Client.Client.Rate_limit
+module Caller = Client.Client.Caller
 module Pool = Client.Client.Pool
 
 (* Create an RPC function that uses a specific User-Agent header *)
@@ -14,22 +15,28 @@ let rate_limit_throttling_test rpc session_id () =
   let test_user_agent =
     "quicktest-rate-limit-throttle-" ^ Uuidx.(to_string (make ()))
   in
-  let burst_size = 0.001 in
-  let fill_rate = 0.001 in
-  (* Token cost for pool.get_all from xapi_rate_limit.ml *)
-  let call_cost = 0.000059 in
-  let rate_limit_ref =
-    Rate_limit.create ~rpc ~session_id ~user_agent:test_user_agent ~host_ip:""
-      ~burst_size ~fill_rate
+  let burst_size = 0.5 in
+  let fill_rate = 2.0 in
+  (* Token cost for pool.get_all from xapi_caller.ml (default_token_cost) *)
+  let call_cost = 0.1 in
+  let caller_ref =
+    Caller.create ~rpc ~session_id ~name_label:"quicktest-throttle"
+      ~user_agent:test_user_agent ~host_ip:""
   in
-  let cleanup () = Rate_limit.destroy ~rpc ~session_id ~self:rate_limit_ref in
+  let rate_limit_ref =
+    Rate_limit.create ~rpc ~session_id ~caller:caller_ref ~burst_size ~fill_rate
+  in
+  let cleanup () =
+    Rate_limit.destroy ~rpc ~session_id ~self:rate_limit_ref ;
+    Caller.destroy ~rpc ~session_id ~self:caller_ref
+  in
   Fun.protect ~finally:cleanup (fun () ->
       let throttled_rpc = make_rpc_with_user_agent test_user_agent in
       let make_call () =
         ignore (Client.Client.Pool.get_all ~rpc:throttled_rpc ~session_id)
       in
       (* Measure baseline: unthrottled calls *)
-      let num_calls = 500 in
+      let num_calls = 100 in
       let start_unthrottled = Mtime_clock.counter () in
       for _ = 1 to num_calls do
         ignore (Client.Client.Pool.get_all ~rpc ~session_id)
@@ -66,44 +73,41 @@ let rate_limit_throttling_test rpc session_id () =
 
 (* Test that invalid rate limits are rejected *)
 let rate_limit_invalid_test rpc session_id () =
-  (* Empty user_agent and host_ip should fail *)
-  let empty_key_rejected =
-    try
-      let ref =
-        Rate_limit.create ~rpc ~session_id ~user_agent:"" ~host_ip:""
-          ~burst_size:10.0 ~fill_rate:1.0
-      in
-      Rate_limit.destroy ~rpc ~session_id ~self:ref ;
-      false
-    with Api_errors.Server_error (code, _) -> code = Api_errors.invalid_value
+  let caller_ref =
+    Caller.create ~rpc ~session_id ~name_label:"quicktest-invalid"
+      ~user_agent:"test-agent" ~host_ip:""
   in
-  Alcotest.(check bool)
-    "Empty user_agent and host_ip rejected" true empty_key_rejected ;
-  (* Zero fill rate should fail *)
-  let zero_fill_rejected =
-    try
-      let ref =
-        Rate_limit.create ~rpc ~session_id ~user_agent:"test-agent" ~host_ip:""
-          ~burst_size:10.0 ~fill_rate:0.0
+  Fun.protect
+    ~finally:(fun () -> Caller.destroy ~rpc ~session_id ~self:caller_ref)
+    (fun () ->
+      (* Zero fill rate should fail *)
+      let zero_fill_rejected =
+        try
+          let ref =
+            Rate_limit.create ~rpc ~session_id ~caller:caller_ref
+              ~burst_size:10.0 ~fill_rate:0.0
+          in
+          Rate_limit.destroy ~rpc ~session_id ~self:ref ;
+          false
+        with Api_errors.Server_error (code, _) ->
+          code = Api_errors.invalid_value
       in
-      Rate_limit.destroy ~rpc ~session_id ~self:ref ;
-      false
-    with Api_errors.Server_error (code, _) -> code = Api_errors.invalid_value
-  in
-  Alcotest.(check bool) "Zero fill rate rejected" true zero_fill_rejected ;
-  (* Negative fill rate should fail *)
-  let negative_fill_rejected =
-    try
-      let ref =
-        Rate_limit.create ~rpc ~session_id ~user_agent:"test-agent2" ~host_ip:""
-          ~burst_size:10.0 ~fill_rate:(-1.0)
+      Alcotest.(check bool) "Zero fill rate rejected" true zero_fill_rejected ;
+      (* Negative fill rate should fail *)
+      let negative_fill_rejected =
+        try
+          let ref =
+            Rate_limit.create ~rpc ~session_id ~caller:caller_ref
+              ~burst_size:10.0 ~fill_rate:(-1.0)
+          in
+          Rate_limit.destroy ~rpc ~session_id ~self:ref ;
+          false
+        with Api_errors.Server_error (code, _) ->
+          code = Api_errors.invalid_value
       in
-      Rate_limit.destroy ~rpc ~session_id ~self:ref ;
-      false
-    with Api_errors.Server_error (code, _) -> code = Api_errors.invalid_value
-  in
-  Alcotest.(check bool)
-    "Negative fill rate rejected" true negative_fill_rejected
+      Alcotest.(check bool)
+        "Negative fill rate rejected" true negative_fill_rejected
+    )
 
 let tests () =
   let open Qt_filter in

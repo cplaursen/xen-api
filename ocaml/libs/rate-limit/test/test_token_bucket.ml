@@ -1,6 +1,3 @@
-open Thread
-open Rate_limit
-
 let test_bad_fill_rate () =
   let tb_zero = Token_bucket.create ~burst_size:1.0 ~fill_rate:0.0 in
   Alcotest.(check bool)
@@ -103,11 +100,13 @@ let test_concurrent_access () =
   in
   let threads =
     Array.init 10 (fun _ ->
-        create
+        Thread.create
           (fun () ->
-            Token_bucket.consume_with_timestamp
-              (fun () -> Mtime.Span.zero)
-              tb 1.0
+            ignore
+              (Token_bucket.consume_with_timestamp
+                 (fun () -> Mtime.Span.zero)
+                 tb 1.0
+              )
           )
           ()
     )
@@ -146,7 +145,7 @@ let test_concurrent_system_time () =
 
   let threads =
     Array.init num_threads (fun _ ->
-        create
+        Thread.create
           (fun () ->
             for _ = 1 to consume_per_thread do
               ignore (Token_bucket.consume tb 1.0)
@@ -179,7 +178,7 @@ let test_consume_more_than_available_concurrent () =
 
   let threads =
     Array.init num_threads (fun _ ->
-        create
+        Thread.create
           (fun () ->
             let success =
               Token_bucket.consume_with_timestamp

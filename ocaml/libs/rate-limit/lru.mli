@@ -56,6 +56,11 @@ val trim : ('a, 'b) t -> unit
    not exceed the capacity. No finalisation of elements that are
    removed. Use [drop_while] for custom finalisation. *)
 
+val add_trim : ('a, 'b) t -> 'a -> 'b -> unit
+(** [add_trim t key value] adds an entry and trims under a single lock
+    acquisition. Equivalent to [add] followed by [trim] but avoids
+    the overhead of locking twice. *)
+
 val to_list : ('a, 'b) t -> ('a * 'b) list
 (** retrieve all elements as a list. The head of the list is in LRU
     order: the least-used entry is at the head of the list. *)

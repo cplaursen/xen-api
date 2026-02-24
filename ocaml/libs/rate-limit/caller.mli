@@ -65,7 +65,12 @@ val get_stats : t -> client_id:Client_table.Key.t -> stats option
     client, or [None] if no client matches (wildcard matching).
     Statistics are pruned to the sliding window before returning. *)
 
-val set_rate_limiter : t -> client_id:Client_table.Key.t -> Rate_limit.t -> bool
+val set_rate_limiter :
+     t
+  -> client_id:Client_table.Key.t
+  -> burst_size:float
+  -> fill_rate:float
+  -> bool
 (** [set_rate_limiter t ~client_id rl] attaches a rate limiter to the
     client identified by exact key match. Any previously attached rate
     limiter is deleted first. Returns [false] if no client was found. *)

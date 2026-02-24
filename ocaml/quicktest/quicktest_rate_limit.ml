@@ -1,4 +1,3 @@
-module Rate_limit = Client.Client.Rate_limit
 module Caller = Client.Client.Caller
 module Pool = Client.Client.Pool
 
@@ -23,13 +22,11 @@ let rate_limit_throttling_test rpc session_id () =
     Caller.create ~rpc ~session_id ~name_label:"quicktest-throttle"
       ~user_agent:test_user_agent ~host_ip:""
   in
-  let rate_limit_ref =
-    Rate_limit.create ~rpc ~session_id ~caller:caller_ref ~burst_size ~fill_rate
+  let _ =
+    Caller.enable_rate_limit ~rpc ~session_id ~self:caller_ref ~burst_size
+      ~fill_rate
   in
-  let cleanup () =
-    Rate_limit.destroy ~rpc ~session_id ~self:rate_limit_ref ;
-    Caller.destroy ~rpc ~session_id ~self:caller_ref
-  in
+  let cleanup () = Caller.destroy ~rpc ~session_id ~self:caller_ref in
   Fun.protect ~finally:cleanup (fun () ->
       let throttled_rpc = make_rpc_with_user_agent test_user_agent in
       let make_call () =
@@ -83,11 +80,9 @@ let rate_limit_invalid_test rpc session_id () =
       (* Zero fill rate should fail *)
       let zero_fill_rejected =
         try
-          let ref =
-            Rate_limit.create ~rpc ~session_id ~caller:caller_ref
-              ~burst_size:10.0 ~fill_rate:0.0
-          in
-          Rate_limit.destroy ~rpc ~session_id ~self:ref ;
+          Caller.enable_rate_limit ~rpc ~session_id ~self:caller_ref
+            ~burst_size:10.0 ~fill_rate:0.0 ;
+          Caller.disable_rate_limit ~rpc ~session_id ~self:caller_ref ;
           false
         with Api_errors.Server_error (code, _) ->
           code = Api_errors.invalid_value
@@ -96,11 +91,9 @@ let rate_limit_invalid_test rpc session_id () =
       (* Negative fill rate should fail *)
       let negative_fill_rejected =
         try
-          let ref =
-            Rate_limit.create ~rpc ~session_id ~caller:caller_ref
-              ~burst_size:10.0 ~fill_rate:(-1.0)
-          in
-          Rate_limit.destroy ~rpc ~session_id ~self:ref ;
+          Caller.enable_rate_limit ~rpc ~session_id ~self:caller_ref
+            ~burst_size:10.0 ~fill_rate:(-1.0) ;
+          Caller.disable_rate_limit ~rpc ~session_id ~self:caller_ref ;
           false
         with Api_errors.Server_error (code, _) ->
           code = Api_errors.invalid_value

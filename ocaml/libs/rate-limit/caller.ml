@@ -95,7 +95,8 @@ let get_stats t ~client_id =
   | None ->
       None
 
-let set_rate_limiter t ~client_id rate_limiter =
+let set_rate_limiter t ~client_id ~burst_size ~fill_rate =
+  let rate_limiter = Rate_limit.create ~burst_size ~fill_rate in
   match Client_table.get_exact t.table ~client_id with
   | Some data ->
       let old_rl =

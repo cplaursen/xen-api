@@ -6056,45 +6056,22 @@ let caller_record rpc session_id caller =
         make_field ~name:"uuid" ~get:(fun () -> (x ()).API.caller_uuid) ()
       ; make_field ~name:"name-label"
           ~get:(fun () -> (x ()).API.caller_name_label)
+          ~set:(fun s ->
+            Client.Caller.set_name_label ~rpc ~session_id ~self:!_ref ~value:s
+          )
           ()
       ; make_field ~name:"user-agent"
           ~get:(fun () -> (x ()).API.caller_user_agent)
           ()
       ; make_field ~name:"host-ip" ~get:(fun () -> (x ()).API.caller_host_ip) ()
-      ]
-  }
-
-let rate_limit_record rpc session_id rate_limit =
-  let _ref = ref rate_limit in
-  let empty_record =
-    ToGet (fun () -> Client.Rate_limit.get_record ~rpc ~session_id ~self:!_ref)
-  in
-  let record = ref empty_record in
-  let x () = lzy_get record in
-  {
-    setref=
-      (fun r ->
-        _ref := r ;
-        record := empty_record
-      )
-  ; setrefrec=
-      (fun (a, b) ->
-        _ref := a ;
-        record := Got b
-      )
-  ; record= x
-  ; getref= (fun () -> !_ref)
-  ; fields=
-      [
-        make_field ~name:"uuid" ~get:(fun () -> (x ()).API.rate_limit_uuid) ()
-      ; make_field ~name:"caller"
-          ~get:(fun () -> Ref.string_of (x ()).API.rate_limit_caller)
-          ()
       ; make_field ~name:"burst-size"
-          ~get:(fun () -> string_of_float (x ()).API.rate_limit_burst_size)
+          ~get:(fun () -> string_of_float (x ()).API.caller_burst_size)
           ()
       ; make_field ~name:"fill-rate"
-          ~get:(fun () -> string_of_float (x ()).API.rate_limit_fill_rate)
+          ~get:(fun () -> string_of_float (x ()).API.caller_fill_rate)
+          ()
+      ; make_field ~name:"last-call"
+          ~get:(fun () -> Date.to_rfc3339 (x ()).API.caller_last_call)
           ()
       ]
   }

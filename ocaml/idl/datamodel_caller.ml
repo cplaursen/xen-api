@@ -24,7 +24,7 @@ let create =
       [
         ( String
         , "name_label"
-        , "Label for this user. For identification purposes"
+        , "Label for this user. For identification purposes."
         )
       ; ( String
         , "user_agent"
@@ -39,6 +39,24 @@ let create =
       ]
     ~doc:"Register a new tracked caller" ~allowed_roles:_R_POOL_OP ()
     ~result:(Ref _caller, "The reference of the created rate limit.")
+
+let enable_rate_limit =
+  call ~name:"enable_rate_limit" ~lifecycle
+    ~params:
+      [
+        (Ref _caller, "self", "Caller to rate limit")
+      ; ( Float
+        , "burst_size"
+        , "Amount of tokens that can be consumed at once before rate limiting"
+        )
+      ; (Float, "fill_rate", "Amount of tokens added every second")
+      ]
+    ~doc:"Attach a rate limiter to a caller" ~allowed_roles:_R_POOL_OP ()
+
+let disable_rate_limit =
+  call ~name:"disable_rate_limit" ~lifecycle
+    ~params:[(Ref _caller, "self", "Caller to stop rate limiting")]
+    ~doc:"Stop rate limiting a caller" ~allowed_roles:_R_POOL_OP ()
 
 let destroy =
   call ~name:"destroy" ~lifecycle
@@ -62,12 +80,18 @@ let t =
         ; field ~qualifier:StaticRO ~ty:String ~lifecycle "host_ip"
             "IP address of the caller" ~ignore_foreign_key:true
             ~default_value:(Some (VString ""))
+        ; field ~qualifier:DynamicRO ~ty:DateTime ~lifecycle "last_call"
+            "Last time a call was received from this caller"
+            ~ignore_foreign_key:true ~default_value:(Some (VDateTime Date.epoch))
         ; field ~qualifier:StaticRO ~ty:Float ~lifecycle "burst_size"
-            "Amount of tokens that can be consumed at once"
+            "Rate limiter: amount of tokens that can be consumed at once. If \
+             negative then no rate limit is applied"
             ~ignore_foreign_key:true ~default_value:(Some (VFloat (-1.)))
         ; field ~qualifier:StaticRO ~ty:Float ~lifecycle "fill_rate"
-            "Tokens added to token bucket per second" ~ignore_foreign_key:true
-            ~default_value:(Some (VFloat (-1.)))
+            "Rate limiter: Tokens added per second. If negative then no rate \
+             limit is applied"
+            ~ignore_foreign_key:true ~default_value:(Some (VFloat (-1.)))
         ]
       )
-    ~messages:[create; destroy] ()
+    ~messages:[create; destroy; enable_rate_limit; disable_rate_limit]
+    ()

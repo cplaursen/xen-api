@@ -15,15 +15,15 @@ module D = Debug.Make (struct let name = "xapi_client" end)
 
 module Key = Client_table.Key
 
-let tracker = Client_tracker.create ()
+let caller_table = Caller.create ()
 
 let submit_sync ~client_id ~callback amount =
-  Client_tracker.submit_sync tracker ~client_id ~callback amount
+  Caller.submit_sync caller_table ~client_id ~callback amount
 
 let submit ~client_id ~callback amount =
-  Client_tracker.submit_async tracker ~client_id ~callback amount
+  Caller.submit_async caller_table ~client_id ~callback amount
 
-let get_stats ~client_id = Client_tracker.get_stats tracker ~client_id
+let get_stats ~client_id = Caller.get_stats caller_table ~client_id
 
 let create ~__context ~name_label ~user_agent ~host_ip =
   if user_agent = "" && host_ip = "" then
@@ -33,7 +33,7 @@ let create ~__context ~name_label ~user_agent ~host_ip =
           (invalid_value, ["Expected user_agent or host_ip to be nonempty"])
       ) ;
   let client_id = Key.{user_agent; host_ip} in
-  if Client_tracker.mem tracker ~client_id then
+  if Caller.mem caller_table ~client_id then
     raise
       Api_errors.(
         Server_error
@@ -43,23 +43,43 @@ let create ~__context ~name_label ~user_agent ~host_ip =
       ) ;
   let uuid = Uuidx.make () in
   let ref = Ref.make () in
-  if Client_tracker.add_client tracker ~client_id () then (
+  if Caller.add_client caller_table ~client_id () then (
     Db.Caller.create ~__context ~ref ~uuid:(Uuidx.to_string uuid) ~user_agent
-      ~host_ip ~burst_size:(-1.) ~fill_rate:(-1.) ~name_label ;
+      ~host_ip ~name_label ~last_call:Clock.Date.epoch ~burst_size:(-1.)
+      ~fill_rate:(-1.) ;
     ref
   ) else
-    raise
-      Api_errors.(
-        Server_error (internal_error, ["Failed to add client to tracker"])
-      )
+    raise Api_errors.(Server_error (internal_error, ["Failed to create caller"]))
 
 let destroy ~__context ~self =
   let record = Db.Caller.get_record ~__context ~self in
   let client_id =
     Key.{user_agent= record.caller_user_agent; host_ip= record.caller_host_ip}
   in
-  Client_tracker.remove_client tracker ~client_id ;
+  Caller.remove_client caller_table ~client_id ;
   Db.Caller.destroy ~__context ~self
+
+let key_of_caller ~record =
+  Key.
+    {
+      user_agent= record.API.caller_user_agent
+    ; host_ip= record.API.caller_host_ip
+    }
+
+let enable_rate_limit ~__context ~self ~burst_size ~fill_rate =
+  let record = Db.Caller.get_record ~__context ~self in
+  Db.Caller.set_burst_size ~__context ~self ~value:burst_size ;
+  Db.Caller.set_fill_rate ~__context ~self ~value:fill_rate ;
+  ignore (* TODO Log any failures *)
+    (Caller.set_rate_limiter caller_table ~client_id:(key_of_caller ~record)
+       ~burst_size ~fill_rate
+    )
+
+let disable_rate_limit ~__context ~self =
+  let record = Db.Caller.get_record ~__context ~self in
+  Db.Caller.set_burst_size ~__context ~self ~value:(-1.) ;
+  Db.Caller.set_fill_rate ~__context ~self ~value:(-1.) ;
+  Caller.remove_rate_limiter caller_table ~client_id:(key_of_caller ~record)
 
 let register ~__context =
   List.iter
@@ -72,7 +92,14 @@ let register ~__context =
           ; host_ip= record.API.caller_host_ip
           }
       in
-      ignore (Client_tracker.add_client tracker ~client_id ())
+      let burst_size = record.API.caller_burst_size in
+      let fill_rate = record.API.caller_fill_rate in
+      ignore (Caller.add_client caller_table ~client_id ()) ;
+      if burst_size > 0. && fill_rate > 0. then
+        ignore
+          (Caller.set_rate_limiter caller_table ~client_id ~burst_size
+             ~fill_rate
+          )
     )
     (Db.Caller.get_all ~__context)
 

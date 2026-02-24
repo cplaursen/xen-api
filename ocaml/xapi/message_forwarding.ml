@@ -6810,7 +6810,6 @@ functor
     end
 
     module Caller = Xapi_caller
-    module Rate_limit = Xapi_rate_limit
   end
 
 (* for unit tests *)

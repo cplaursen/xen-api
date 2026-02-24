@@ -65,7 +65,6 @@ type without_secret =
   | `subject
   | `task
   | `Caller
-  | `Rate_limit
   | `tunnel
   | `USB_group
   | `user

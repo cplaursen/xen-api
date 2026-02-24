@@ -10546,7 +10546,6 @@ let all_system =
   ; Datamodel_host_driver.t
   ; Datamodel_driver_variant.t
   ; Datamodel_caller.t
-  ; Datamodel_rate_limit.t
   ]
 
 (* If the relation is one-to-many, the "many" nodes (one edge each) must come before the "one" node (many edges) *)

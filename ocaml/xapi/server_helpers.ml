@@ -181,7 +181,7 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
            ()
         )
     in
-    let handle_request () =
+    let handle_request_internal () =
       match sync_ty with
       | `Sync ->
           sync ()
@@ -193,7 +193,7 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
           async ~need_complete:true ;
           Rpc.success (API.rpc_of_ref_task (Context.get_task_id __context))
     in
-    let handle_request_throttled () =
+    let handle_request_external () =
       let token_cost = Xapi_caller.get_token_cost called_fn_name in
       let client_id =
         Xapi_caller.Key.
@@ -216,9 +216,9 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
           Rpc.success (API.rpc_of_ref_task (Context.get_task_id __context))
     in
     if Context.is_internal_origin __context then
-      handle_request ()
+      handle_request_internal ()
     else
-      handle_request_throttled ()
+      handle_request_external ()
 
 (* in the following functions, it is our responsibility to complete any tasks we create *)
 let exec_with_new_task ?http_other_config ?quiet ?subtask_of ?session_id

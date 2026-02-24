@@ -66,7 +66,6 @@
   rbac_static
   xapi_role
   xapi_caller
-  xapi_rate_limit
   xapi_extensions
   db)
  (modes best)
@@ -133,7 +132,6 @@
    exnHelper
    xapi_role
    xapi_caller
-   xapi_rate_limit
    xapi_extensions
    db))
  (libraries

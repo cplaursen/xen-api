@@ -3869,6 +3869,24 @@ let rec cmdtable_data : (string * cmd_spec) list =
       ; flags= []
       }
     )
+  ; ( "caller-enable-rate-limit"
+    , {
+        reqd= ["uuid"; "burst-size"; "fill-rate"]
+      ; optn= []
+      ; help= "Enable rate limiting on a given caller."
+      ; implementation= No_fd Cli_operations.Caller.enable_rate_limit
+      ; flags= []
+      }
+    )
+  ; ( "caller-disable-rate-limit"
+    , {
+        reqd= ["uuid"]
+      ; optn= []
+      ; help= "Disable rate limiting on a given caller."
+      ; implementation= No_fd Cli_operations.Caller.disable_rate_limit
+      ; flags= []
+      }
+    )
   ]
 
 let cmdtable : (string, cmd_spec) Hashtbl.t = Hashtbl.create 50

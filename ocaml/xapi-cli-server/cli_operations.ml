@@ -1411,7 +1411,14 @@ let gen_cmds rpc session_id =
       )
     ; Client.Caller.(
         mk get_all_records_where get_by_uuid caller_record "caller" []
-          ["uuid"; "host-ip"; "user-agent"]
+          [
+            "uuid"
+          ; "host-ip"
+          ; "user-agent"
+          ; "last-call"
+          ; "burst-size"
+          ; "fill-rate"
+          ]
           rpc session_id
       )
     ]
@@ -8301,4 +8308,19 @@ module Caller = struct
       Client.Caller.get_by_uuid ~rpc ~session_id ~uuid:(List.assoc "uuid" params)
     in
     Client.Caller.destroy ~rpc ~session_id ~self:ref
+
+  let enable_rate_limit _printer rpc session_id params =
+    let ref =
+      Client.Caller.get_by_uuid ~rpc ~session_id ~uuid:(List.assoc "uuid" params)
+    in
+    let burst_size = float_of_string (List.assoc "burst-size" params) in
+    let fill_rate = float_of_string (List.assoc "fill-rate" params) in
+    Client.Caller.enable_rate_limit ~rpc ~session_id ~self:ref ~burst_size
+      ~fill_rate
+
+  let disable_rate_limit _printer rpc session_id params =
+    let ref =
+      Client.Caller.get_by_uuid ~rpc ~session_id ~uuid:(List.assoc "uuid" params)
+    in
+    Client.Caller.disable_rate_limit ~rpc ~session_id ~self:ref
 end

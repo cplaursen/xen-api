@@ -195,20 +195,20 @@ let do_dispatch ?session_id ?forward_op ?self:_ supports_async called_fn_name
     in
     let handle_request_external () =
       let token_cost = Xapi_caller.get_token_cost called_fn_name in
-      let client_id =
-        Xapi_caller.Key.
-          {
-            user_agent= Option.value http_req.user_agent ~default:""
-          ; host_ip= Option.value (Context.get_client_ip __context) ~default:""
-          }
+      let user_agent = Option.value http_req.user_agent ~default:"" in
+      let host_ip =
+        Option.value (Context.get_client_ip __context) ~default:""
       in
       match sync_ty with
       | `Sync ->
-          Xapi_caller.submit_sync ~client_id ~callback:sync token_cost
+          Xapi_caller.submit_sync ~user_agent ~host_ip ~callback:sync
+            ~task_create:(fun f -> f __context)
+            token_cost
       | `Async ->
           let need_complete = not (Context.forwarded_task __context) in
-          Xapi_caller.submit ~client_id
+          Xapi_caller.submit_async ~user_agent ~host_ip
             ~callback:(fun () -> async ~need_complete)
+            ~task_create:(fun f -> f __context)
             token_cost ;
           Rpc.success (API.rpc_of_ref_task (Context.get_task_id __context))
       | `InternalAsync ->

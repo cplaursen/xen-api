@@ -3887,6 +3887,24 @@ let rec cmdtable_data : (string * cmd_spec) list =
       ; flags= []
       }
     )
+  ; ( "caller-get-usage"
+    , {
+        reqd= ["uuid"]
+      ; optn= []
+      ; help= "Get usage statistics for a given caller"
+      ; implementation= No_fd Cli_operations.Caller.get_usage
+      ; flags= []
+      }
+    )
+  ; ( "caller-get-usage-all"
+    , {
+        reqd= []
+      ; optn= []
+      ; help= "Get usage statistics for all callers"
+      ; implementation= No_fd Cli_operations.Caller.get_usage_all
+      ; flags= []
+      }
+    )
   ]
 
 let cmdtable : (string, cmd_spec) Hashtbl.t = Hashtbl.create 50

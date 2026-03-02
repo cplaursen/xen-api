@@ -133,15 +133,15 @@ let remove_rate_limiter t ~client_id =
 (** Look up a client by wildcard matching; if not found, auto-add with
     the exact [client_id] and no rate limiter. Returns [None] only when
     the key is all-wildcard (rejected by insert). *)
-let get_or_create t ~client_id =
+let get_or_create t ~client_id ~on_create =
   match Client_table.get t.table ~client_id with
   | Some data ->
       Some data
   | None ->
       let data = make_client_data () in
-      if Client_table.insert t.table ~client_id data then
-        Some data
-      else
+      if Client_table.insert t.table ~client_id data then (
+        on_create () ; Some data
+      ) else
         (* Race: another thread inserted first, or key was all-wildcard *)
         Client_table.get t.table ~client_id
 
@@ -154,8 +154,8 @@ let record_and_get_limiter ~window data amount =
       data.rate_limiter
   )
 
-let submit_async t ~client_id ~callback amount =
-  match get_or_create t ~client_id with
+let submit_async t ~client_id ~callback ~on_create amount =
+  match get_or_create t ~client_id ~on_create with
   | Some data -> (
     match record_and_get_limiter ~window:t.window data amount with
     | Some rl ->
@@ -166,8 +166,8 @@ let submit_async t ~client_id ~callback amount =
   | None ->
       callback ()
 
-let submit_sync t ~client_id ~callback amount =
-  match get_or_create t ~client_id with
+let submit_sync t ~client_id ~callback ~on_create amount =
+  match get_or_create t ~client_id ~on_create with
   | Some data -> (
     match record_and_get_limiter ~window:t.window data amount with
     | Some rl ->

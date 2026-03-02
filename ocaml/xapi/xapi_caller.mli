@@ -14,9 +14,21 @@
 
 module Key = Client_table.Key
 
-val submit_sync : client_id:Key.t -> callback:(unit -> 'a) -> float -> 'a
+val submit_sync :
+     user_agent:string
+  -> host_ip:string
+  -> callback:(unit -> 'a)
+  -> task_create:((Context.t -> unit) -> unit)
+  -> float
+  -> 'a
 
-val submit : client_id:Key.t -> callback:(unit -> unit) -> float -> unit
+val submit_async :
+     user_agent:string
+  -> host_ip:string
+  -> callback:(unit -> unit)
+  -> task_create:((Context.t -> unit) -> unit)
+  -> float
+  -> unit
 
 val get_stats : client_id:Key.t -> Caller.stats option
 
@@ -35,6 +47,10 @@ val destroy : __context:Context.t -> self:[`Caller] API.Ref.t -> unit
 
 val register : __context:Context.t -> unit
 (** Load caller records from the database into the client tracker *)
+
+val usage : __context:Context.t -> self:[`Caller] API.Ref.t -> float
+
+val usage_all : __context:Context.t -> (string * float) list
 
 val enable_rate_limit :
      __context:Context.t

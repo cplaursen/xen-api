@@ -67,9 +67,18 @@ let test_submit_tracks_tokens () =
   let t = Caller.create () in
   let _ = Caller.add_client t ~client_id:(key "curl" "") () in
   let id = key "curl" "1.2.3.4" in
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 3.0 ;
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 7.0 ;
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 2.5 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    3.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    7.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    2.5 ;
   let stats = Option.get (Caller.get_stats t ~client_id:id) in
   check_stats "after 3 calls" ~call_count:3 ~tokens_consumed:12.5 stats ;
   Alcotest.(check bool) "last_called is set" true (stats.last_called <> None)
@@ -78,10 +87,18 @@ let test_submit_sync_tracks_tokens () =
   let t = Caller.create () in
   let _ = Caller.add_client t ~client_id:(key "curl" "") () in
   let id = key "curl" "1.2.3.4" in
-  let r1 = Caller.submit_sync t ~client_id:id ~callback:(fun () -> 42) 5.0 in
+  let r1 =
+    Caller.submit_sync t ~client_id:id
+      ~callback:(fun () -> 42)
+      ~on_create:(fun () -> ())
+      5.0
+  in
   Alcotest.(check int) "sync returns result" 42 r1 ;
   let r2 =
-    Caller.submit_sync t ~client_id:id ~callback:(fun () -> "hello") 3.0
+    Caller.submit_sync t ~client_id:id
+      ~callback:(fun () -> "hello")
+      ~on_create:(fun () -> ())
+      3.0
   in
   Alcotest.(check string) "sync returns string" "hello" r2 ;
   let stats = Option.get (Caller.get_stats t ~client_id:id) in
@@ -92,21 +109,31 @@ let test_submit_sync_tracks_tokens () =
 let test_auto_add_on_submit_async () =
   let t = Caller.create () in
   let id = key "curl" "1.2.3.4" in
+  let created = ref false in
   Alcotest.(check bool) "not present before" false (Caller.mem t ~client_id:id) ;
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 1.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> created := true)
+    1.0 ;
   Alcotest.(check bool)
     "auto-added after submit" true
     (Caller.mem t ~client_id:id) ;
+  Alcotest.(check bool) "on_create called" true !created ;
   let stats = Option.get (Caller.get_stats t ~client_id:id) in
   check_stats "auto-added has 1 call" ~call_count:1 ~tokens_consumed:1.0 stats
 
 let test_auto_add_on_submit_sync () =
   let t = Caller.create () in
   let id = key "wget" "10.0.0.1" in
+  let created = ref false in
   let result =
-    Caller.submit_sync t ~client_id:id ~callback:(fun () -> 99) 2.0
+    Caller.submit_sync t ~client_id:id
+      ~callback:(fun () -> 99)
+      ~on_create:(fun () -> created := true)
+      2.0
   in
   Alcotest.(check int) "sync callback runs" 99 result ;
+  Alcotest.(check bool) "on_create called" true !created ;
   let stats = Option.get (Caller.get_stats t ~client_id:id) in
   check_stats "auto-added sync" ~call_count:1 ~tokens_consumed:2.0 stats
 
@@ -114,7 +141,10 @@ let test_auto_add_no_rate_limiter () =
   let t = Caller.create () in
   let id = key "curl" "1.2.3.4" in
   let executed = ref false in
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> executed := true) 1.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> executed := true)
+    ~on_create:(fun () -> ())
+    1.0 ;
   Alcotest.(check bool)
     "callback runs immediately (no rate limiter)" true !executed
 
@@ -124,6 +154,7 @@ let test_auto_add_matches_existing_wildcard () =
   (* Submit with a specific key that matches the wildcard rule *)
   Caller.submit_async t ~client_id:(key "curl" "1.2.3.4")
     ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
     5.0 ;
   (* The call should be recorded on the wildcard entry, not auto-added *)
   let stats =
@@ -146,8 +177,14 @@ let test_sliding_window_prunes_old_calls () =
   let t = Caller.create ~window () in
   let _ = Caller.add_client t ~client_id:(key "curl" "") () in
   let id = key "curl" "1.2.3.4" in
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 3.0 ;
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 4.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    3.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    4.0 ;
   let stats_before = Option.get (Caller.get_stats t ~client_id:id) in
   check_stats "before expiry" ~call_count:2 ~tokens_consumed:7.0 stats_before ;
   (* Wait for the window to expire *)
@@ -166,12 +203,21 @@ let test_sliding_window_partial_expiry () =
   let _ = Caller.add_client t ~client_id:(key "curl" "") () in
   let id = key "curl" "1.2.3.4" in
   (* First batch of calls *)
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 2.0 ;
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 3.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    2.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    3.0 ;
   (* Wait 200ms - still within window *)
   Thread.delay 0.2 ;
   (* Second batch *)
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 5.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    5.0 ;
   (* Wait another 200ms - first batch should expire, second still valid *)
   Thread.delay 0.2 ;
   let stats = Option.get (Caller.get_stats t ~client_id:id) in
@@ -183,7 +229,10 @@ let test_default_window_is_one_hour () =
   let t = Caller.create () in
   let _ = Caller.add_client t ~client_id:(key "curl" "") () in
   let id = key "curl" "1.2.3.4" in
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 1.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    1.0 ;
   (* With a 1 hour window, the call should still be present *)
   let stats = Option.get (Caller.get_stats t ~client_id:id) in
   check_stats "call within default 1h window" ~call_count:1 ~tokens_consumed:1.0
@@ -219,6 +268,7 @@ let test_remove_rate_limiter () =
   let executed = ref false in
   Caller.submit_async t ~client_id:(key "curl" "1.2.3.4")
     ~callback:(fun () -> executed := true)
+    ~on_create:(fun () -> ())
     1.0 ;
   Alcotest.(check bool)
     "callback runs immediately after limiter removed" true !executed ;
@@ -230,11 +280,17 @@ let test_submit_with_rate_limiter () =
   let _ = Caller.add_client t ~client_id:(key "curl" "") ~rate_limiter:rl () in
   let id = key "curl" "1.2.3.4" in
   (* Drain the bucket *)
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 10.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    10.0 ;
   (* Next submit should be rate limited (non-blocking but queued) *)
   let executed = ref false in
   let start = Mtime_clock.counter () in
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> executed := true) 5.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> executed := true)
+    ~on_create:(fun () -> ())
+    5.0 ;
   let elapsed = Mtime.Span.to_float_ns (Mtime_clock.count start) *. 1e-9 in
   Alcotest.(check bool) "submit_async returns immediately" true (elapsed < 0.1) ;
   (* Wait for worker to process *)
@@ -252,14 +308,23 @@ let test_submit_sync_with_rate_limiter () =
   let _ = Caller.add_client t ~client_id:(key "curl" "") ~rate_limiter:rl () in
   let id = key "curl" "1.2.3.4" in
   let result =
-    Caller.submit_sync t ~client_id:id ~callback:(fun () -> 42) 5.0
+    Caller.submit_sync t ~client_id:id
+      ~callback:(fun () -> 42)
+      ~on_create:(fun () -> ())
+      5.0
   in
   Alcotest.(check int) "sync returns result" 42 result ;
   (* Drain the bucket *)
-  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 5.0 ;
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    5.0 ;
   let start = Mtime_clock.counter () in
   let result2 =
-    Caller.submit_sync t ~client_id:id ~callback:(fun () -> "done") 5.0
+    Caller.submit_sync t ~client_id:id
+      ~callback:(fun () -> "done")
+      ~on_create:(fun () -> ())
+      5.0
   in
   let elapsed = Mtime.Span.to_float_ns (Mtime_clock.count start) *. 1e-9 in
   Alcotest.(check string) "sync returns after wait" "done" result2 ;
@@ -274,9 +339,18 @@ let test_multiple_clients_independent_stats () =
   let _ = Caller.add_client t ~client_id:(key "wget" "") () in
   let curl_id = key "curl" "1.2.3.4" in
   let wget_id = key "wget" "1.2.3.4" in
-  Caller.submit_async t ~client_id:curl_id ~callback:(fun () -> ()) 3.0 ;
-  Caller.submit_async t ~client_id:curl_id ~callback:(fun () -> ()) 2.0 ;
-  Caller.submit_async t ~client_id:wget_id ~callback:(fun () -> ()) 7.0 ;
+  Caller.submit_async t ~client_id:curl_id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    3.0 ;
+  Caller.submit_async t ~client_id:curl_id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    2.0 ;
+  Caller.submit_async t ~client_id:wget_id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> ())
+    7.0 ;
   let curl_stats = Option.get (Caller.get_stats t ~client_id:curl_id) in
   let wget_stats = Option.get (Caller.get_stats t ~client_id:wget_id) in
   check_stats "curl" ~call_count:2 ~tokens_consumed:5.0 curl_stats ;
@@ -295,7 +369,10 @@ let test_concurrent_submits () =
         Thread.create
           (fun () ->
             for _ = 1 to calls_per_thread do
-              Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 1.0
+              Caller.submit_async t ~client_id:id
+                ~callback:(fun () -> ())
+                ~on_create:(fun () -> ())
+                1.0
             done
           )
           ()
@@ -316,7 +393,10 @@ let test_concurrent_auto_add () =
         Thread.create
           (fun () ->
             let id = key "curl" (Printf.sprintf "10.0.0.%d" i) in
-            Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) 1.0
+            Caller.submit_async t ~client_id:id
+              ~callback:(fun () -> ())
+              ~on_create:(fun () -> ())
+              1.0
           )
           ()
     )
@@ -330,6 +410,42 @@ let test_concurrent_auto_add () =
       true
       (Caller.mem t ~client_id:id)
   done
+
+(* --- on_create callback --- *)
+
+let test_on_create_not_called_for_existing_async () =
+  let t = Caller.create () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let id = key "curl" "1.2.3.4" in
+  let created = ref false in
+  Caller.submit_async t ~client_id:id
+    ~callback:(fun () -> ())
+    ~on_create:(fun () -> created := true)
+    1.0 ;
+  Alcotest.(check bool) "on_create not called for existing" false !created
+
+let test_on_create_not_called_for_existing_sync () =
+  let t = Caller.create () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let id = key "curl" "1.2.3.4" in
+  let created = ref false in
+  let _result =
+    Caller.submit_sync t ~client_id:id
+      ~callback:(fun () -> 42)
+      ~on_create:(fun () -> created := true)
+      1.0
+  in
+  Alcotest.(check bool) "on_create not called for existing" false !created
+
+let test_on_create_called_once_on_repeat_submit () =
+  let t = Caller.create () in
+  let id = key "curl" "1.2.3.4" in
+  let count = ref 0 in
+  let on_create () = incr count in
+  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) ~on_create 1.0 ;
+  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) ~on_create 1.0 ;
+  Caller.submit_async t ~client_id:id ~callback:(fun () -> ()) ~on_create 1.0 ;
+  Alcotest.(check int) "on_create called exactly once" 1 !count
 
 (* --- Remove cleans up rate limiter --- *)
 
@@ -380,6 +496,18 @@ let test =
   ; ("Concurrent submits", `Quick, test_concurrent_submits)
   ; ("Concurrent auto-add", `Quick, test_concurrent_auto_add)
   ; ("Remove cleans up rate limiter", `Quick, test_remove_cleans_up_rate_limiter)
+  ; ( "on_create not called for existing (async)"
+    , `Quick
+    , test_on_create_not_called_for_existing_async
+    )
+  ; ( "on_create not called for existing (sync)"
+    , `Quick
+    , test_on_create_not_called_for_existing_sync
+    )
+  ; ( "on_create called once on repeat submit"
+    , `Quick
+    , test_on_create_called_once_on_repeat_submit
+    )
   ]
 
 let () = Alcotest.run "Caller library" [("Caller tests", test)]

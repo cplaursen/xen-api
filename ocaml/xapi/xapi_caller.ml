@@ -17,13 +17,29 @@ module Key = Client_table.Key
 
 let caller_table = Caller.create ()
 
-let submit_sync ~client_id ~callback amount =
-  Caller.submit_sync caller_table ~client_id ~callback amount
-
-let submit ~client_id ~callback amount =
-  Caller.submit_async caller_table ~client_id ~callback amount
-
 let get_stats ~client_id = Caller.get_stats caller_table ~client_id
+
+let ensure_db_record_exists ~__context ~name_label ~user_agent ~host_ip =
+  if user_agent = "" && host_ip = "" then
+    raise
+      Api_errors.(
+        Server_error
+          (invalid_value, ["Expected user_agent or host_ip to be nonempty"])
+      ) ;
+  let existing =
+    List.exists
+      (fun self ->
+        let record = Db.Caller.get_record ~__context ~self in
+        record.caller_user_agent = user_agent && record.caller_host_ip = host_ip
+      )
+      (Db.Caller.get_all ~__context)
+  in
+  if not existing then
+    let uuid = Uuidx.make () in
+    let ref = Ref.make () in
+    Db.Caller.create ~__context ~ref ~uuid:(Uuidx.to_string uuid) ~user_agent
+      ~host_ip ~name_label ~last_call:Clock.Date.epoch ~burst_size:(-1.)
+      ~fill_rate:(-1.)
 
 let create ~__context ~name_label ~user_agent ~host_ip =
   if user_agent = "" && host_ip = "" then
@@ -38,7 +54,7 @@ let create ~__context ~name_label ~user_agent ~host_ip =
       Api_errors.(
         Server_error
           ( map_duplicate_key
-          , ["user_agent"; user_agent; "user_agent already registered"]
+          , ["client_id"; user_agent; host_ip; "client_id already registered"]
           )
       ) ;
   let uuid = Uuidx.make () in
@@ -66,6 +82,24 @@ let key_of_caller ~record =
     ; host_ip= record.API.caller_host_ip
     }
 
+let submit_sync ~user_agent ~host_ip ~callback ~task_create amount =
+  let on_create () =
+    task_create (fun __context ->
+        ensure_db_record_exists ~__context ~name_label:"" ~user_agent ~host_ip
+    )
+  in
+  let client_id = Key.{user_agent; host_ip} in
+  Caller.submit_sync caller_table ~client_id ~callback ~on_create amount
+
+let submit_async ~user_agent ~host_ip ~callback ~task_create amount =
+  let on_create () =
+    task_create (fun __context ->
+        ensure_db_record_exists ~__context ~name_label:"" ~user_agent ~host_ip
+    )
+  in
+  let client_id = Key.{user_agent; host_ip} in
+  Caller.submit_async caller_table ~client_id ~callback ~on_create amount
+
 let enable_rate_limit ~__context ~self ~burst_size ~fill_rate =
   let record = Db.Caller.get_record ~__context ~self in
   Db.Caller.set_burst_size ~__context ~self ~value:burst_size ;
@@ -80,6 +114,24 @@ let disable_rate_limit ~__context ~self =
   Db.Caller.set_burst_size ~__context ~self ~value:(-1.) ;
   Db.Caller.set_fill_rate ~__context ~self ~value:(-1.) ;
   Caller.remove_rate_limiter caller_table ~client_id:(key_of_caller ~record)
+
+let usage ~__context ~self =
+  let record = Db.Caller.get_record ~__context ~self in
+  let client_id = key_of_caller ~record in
+  match get_stats ~client_id with
+  | Some stats ->
+      stats.Caller.tokens_consumed
+  | None ->
+      0.
+
+let usage_all ~__context =
+  List.map
+    (fun self ->
+      let tokens = usage ~__context ~self in
+      let record = Db.Caller.get_record ~__context ~self in
+      (record.caller_name_label, tokens)
+    )
+    (Db.Caller.get_all ~__context)
 
 let register ~__context =
   List.iter

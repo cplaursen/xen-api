@@ -80,17 +80,28 @@ val remove_rate_limiter : t -> client_id:Client_table.Key.t -> unit
     limiter from the client (exact key match), if any. *)
 
 val submit_async :
-  t -> client_id:Client_table.Key.t -> callback:(unit -> unit) -> float -> unit
-(** [submit_async t ~client_id ~callback amount] records the call and
+     t
+  -> client_id:Client_table.Key.t
+  -> callback:(unit -> unit)
+  -> on_create:(unit -> unit)
+  -> float
+  -> unit
+(** [submit_async t ~client_id ~callback ~on_create amount] records the call and
     submits the callback. If the matching client has a rate limiter, the
     callback is subject to rate limiting; otherwise it runs immediately.
     If no matching client is found, one is automatically added with no
-    rate limiter. Uses wildcard matching. *)
+    rate limiter, and [on_create] is executed. Uses wildcard matching. *)
 
 val submit_sync :
-  t -> client_id:Client_table.Key.t -> callback:(unit -> 'a) -> float -> 'a
+     t
+  -> client_id:Client_table.Key.t
+  -> callback:(unit -> 'a)
+  -> on_create:(unit -> unit)
+  -> float
+  -> 'a
 (** [submit_sync t ~client_id ~callback amount] records the call and
     submits the callback, blocking until it completes. If the matching
     client has a rate limiter, the callback is subject to rate limiting;
     otherwise it runs immediately. If no matching client is found, one is
-    automatically added with no rate limiter. Uses wildcard matching. *)
+    automatically added with no rate limiter, and [on_create] is executed.
+    Uses wildcard matching. *)

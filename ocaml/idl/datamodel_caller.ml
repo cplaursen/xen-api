@@ -60,8 +60,22 @@ let disable_rate_limit =
 
 let destroy =
   call ~name:"destroy" ~lifecycle
-    ~params:[(Ref _caller, "self", "The caller to destroy")]
+    ~params:[(Ref _caller, "self", "Caller to destroy")]
     ~doc:"Destroy a caller" ~allowed_roles:_R_POOL_OP ()
+
+let usage =
+  call ~name:"usage" ~lifecycle
+    ~params:[(Ref _caller, "self", "Caller to obtain usage statistics from")]
+    ~result:(Float, "1 hour sliding window of tokens used")
+    ~doc:"Get usage statistics for a given caller" ~allowed_roles:_R_POOL_OP ()
+
+let usage_all =
+  call ~name:"usage_all" ~lifecycle
+    ~result:
+      ( Map (String, Float)
+      , "1 hour sliding window of tokens used by each caller"
+      )
+    ~doc:"Get usage statistics for all callers" ~allowed_roles:_R_POOL_OP ()
 
 let t =
   create_obj ~name:_caller ~descr:"XAPI caller description and rate limiting"
@@ -93,5 +107,6 @@ let t =
             ~ignore_foreign_key:true ~default_value:(Some (VFloat (-1.)))
         ]
       )
-    ~messages:[create; destroy; enable_rate_limit; disable_rate_limit]
+    ~messages:
+      [create; destroy; enable_rate_limit; disable_rate_limit; usage; usage_all]
     ()

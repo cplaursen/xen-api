@@ -8323,4 +8323,19 @@ module Caller = struct
       Client.Caller.get_by_uuid ~rpc ~session_id ~uuid:(List.assoc "uuid" params)
     in
     Client.Caller.disable_rate_limit ~rpc ~session_id ~self:ref
+
+  let get_usage printer rpc session_id params =
+    let ref =
+      Client.Caller.get_by_uuid ~rpc ~session_id ~uuid:(List.assoc "uuid" params)
+    in
+    let tokens = Client.Caller.usage ~rpc ~session_id ~self:ref in
+    printer (Cli_printer.PMsg (string_of_float tokens))
+
+  let get_usage_all printer rpc session_id _params =
+    let callers =
+      List.map
+        (fun (label, value) -> label ^ ": " ^ string_of_float value)
+        (Client.Caller.usage_all ~rpc ~session_id)
+    in
+    printer (Cli_printer.PList callers)
 end

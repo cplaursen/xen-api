@@ -351,17 +351,18 @@ let add_handler (name, handler) =
       failwith (Printf.sprintf "Unregistered HTTP handler: %s" name)
   in
   let check_rbac = Rbac.is_rbac_enabled_for_http_action name in
-  let rate_limit (client_id_opt : Xapi_caller.Key.t option) handler () =
+  let rate_limit (client_id_opt : (string * string) option) handler () =
     if List.mem name Datamodel.custom_rate_limit_http_actions then
       handler ()
     else
       match client_id_opt with
       | None ->
           handler ()
-      | Some ({user_agent; host_ip} as client_id) ->
+      | Some (user_agent, host_ip) ->
           debug "Rate limiting handler %s with user_agent %s host_ip %s" name
             user_agent host_ip ;
-          Xapi_caller.submit ~client_id ~callback:handler
+          Xapi_caller.submit_async ~user_agent ~host_ip ~callback:handler
+            ~task_create:(Server_helpers.exec_with_new_task "Add new caller")
             Xapi_caller.default_token_cost
   in
   let h req ic () =
@@ -370,7 +371,7 @@ let add_handler (name, handler) =
     let client_id =
       match (req.Http.Request.user_agent, client_info) with
       | Some user_agent, Some (_, ip) ->
-          Some Xapi_caller.Key.{user_agent; host_ip= Ipaddr.to_string ip}
+          Some (user_agent, Ipaddr.to_string ip)
       | _ ->
           None
     in

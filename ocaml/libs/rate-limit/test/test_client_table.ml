@@ -174,9 +174,9 @@ let test_get_during_delete_race () =
 (* Wildcard matching tests *)
 
 let test_wildcard_user_agent_matches_any () =
-  (* An entry with empty user_agent field should match any user_agent *)
+  (* An entry with [*] user_agent field should match any user_agent *)
   let table = Client_table.create () in
-  let pattern = Client_table.Key.{user_agent= ""; host_ip= "192.168.1.1"} in
+  let pattern = Client_table.Key.{user_agent= "*"; host_ip= "192.168.1.1"} in
   let _ = Client_table.insert table ~client_id:pattern 1 in
   (* Should match any user_agent with same host_ip *)
   let client1 = Client_table.Key.{user_agent= "curl"; host_ip= "192.168.1.1"} in
@@ -202,9 +202,9 @@ let test_wildcard_user_agent_matches_any () =
     (Client_table.mem table ~client_id:client_other)
 
 let test_wildcard_host_ip_matches_any () =
-  (* An entry with empty host_ip should match any host_ip *)
+  (* An entry with [*] host_ip should match any host_ip *)
   let table = Client_table.create () in
-  let pattern = Client_table.Key.{user_agent= "curl"; host_ip= ""} in
+  let pattern = Client_table.Key.{user_agent= "curl"; host_ip= "*"} in
   let _ = Client_table.insert table ~client_id:pattern 1 in
   (* Should match any host_ip with same user_agent *)
   let client1 = Client_table.Key.{user_agent= "curl"; host_ip= "192.168.1.1"} in
@@ -231,8 +231,8 @@ let test_wildcard_match_priority_exact_first () =
   (* Exact match should take priority over wildcards *)
   let table = Client_table.create () in
   let exact = Client_table.Key.{user_agent= "curl"; host_ip= "192.168.1.1"} in
-  let wildcard_ua = Client_table.Key.{user_agent= ""; host_ip= "192.168.1.1"} in
-  let wildcard_ip = Client_table.Key.{user_agent= "curl"; host_ip= ""} in
+  let wildcard_ua = Client_table.Key.{user_agent= "*"; host_ip= "192.168.1.1"} in
+  let wildcard_ip = Client_table.Key.{user_agent= "curl"; host_ip= "*"} in
   (* Add in reverse priority order to test sorting *)
   let _ = Client_table.insert table ~client_id:wildcard_ua 5 in
   let _ = Client_table.insert table ~client_id:wildcard_ip 15 in
@@ -247,8 +247,8 @@ let test_wildcard_match_priority_host_ip_over_user_agent () =
   (* host_ip wildcard (user_agent specified) should match before
      user_agent wildcard (host_ip specified) *)
   let table = Client_table.create () in
-  let wildcard_ua = Client_table.Key.{user_agent= ""; host_ip= "192.168.1.1"} in
-  let wildcard_ip = Client_table.Key.{user_agent= "curl"; host_ip= ""} in
+  let wildcard_ua = Client_table.Key.{user_agent= "*"; host_ip= "192.168.1.1"} in
+  let wildcard_ip = Client_table.Key.{user_agent= "curl"; host_ip= "*"} in
   (* Add user_agent wildcard first *)
   let _ = Client_table.insert table ~client_id:wildcard_ua 5 in
   (* Add host_ip wildcard second *)
@@ -265,7 +265,7 @@ let test_no_spurious_wildcard_matches () =
   let pattern1 =
     Client_table.Key.{user_agent= "curl"; host_ip= "192.168.1.1"}
   in
-  let pattern2 = Client_table.Key.{user_agent= "wget"; host_ip= ""} in
+  let pattern2 = Client_table.Key.{user_agent= "wget"; host_ip= "*"} in
   let _ = Client_table.insert table ~client_id:pattern1 10 in
   let _ = Client_table.insert table ~client_id:pattern2 20 in
   (* Client with different user_agent and host_ip should not match pattern1 *)
@@ -295,7 +295,7 @@ let test_lru_cache_overflow () =
      perform >100 distinct lookups so the cache overflows, then verify
      lookups still return correct results after evictions. *)
   let table = Client_table.create () in
-  let pattern = Client_table.Key.{user_agent= "curl"; host_ip= ""} in
+  let pattern = Client_table.Key.{user_agent= "curl"; host_ip= "*"} in
   let _ = Client_table.insert table ~client_id:pattern 42 in
   (* Perform 150 distinct lookups to overflow the cache *)
   for i = 1 to 150 do
@@ -327,11 +327,45 @@ let test_lru_cache_overflow () =
     (Client_table.get table ~client_id:miss)
 
 let test_reject_all_wildcard_key () =
-  (* Keys with both fields empty should be rejected *)
+  (* Keys with both fields [*] should be rejected *)
   let table = Client_table.create () in
-  let all_wildcard = Client_table.Key.{user_agent= ""; host_ip= ""} in
+  let all_wildcard = Client_table.Key.{user_agent= "*"; host_ip= "*"} in
   let success = Client_table.insert table ~client_id:all_wildcard 1 in
   Alcotest.(check bool) "all-wildcard key rejected" false success
+
+let test_prefix_wildcard_matches_prefix () =
+  let table = Client_table.create () in
+  let pattern =
+    Client_table.Key.{user_agent= "xen_api_libs/*"; host_ip= "192.168.1.1"}
+  in
+  let _ = Client_table.insert table ~client_id:pattern 7 in
+  let matching =
+    Client_table.Key.{user_agent= "xen_api_libs/1.2"; host_ip= "192.168.1.1"}
+  in
+  let non_matching =
+    Client_table.Key.{user_agent= "xen_api/1.2"; host_ip= "192.168.1.1"}
+  in
+  Alcotest.(check (option int))
+    "prefix wildcard matches xen_api_libs/1.2" (Some 7)
+    (Client_table.get table ~client_id:matching) ;
+  Alcotest.(check (option int))
+    "prefix wildcard does not match different prefix" None
+    (Client_table.get table ~client_id:non_matching)
+
+let test_prefix_priority_over_full_wildcard () =
+  let table = Client_table.create () in
+  let full = Client_table.Key.{user_agent= "*"; host_ip= "192.168.1.1"} in
+  let prefix =
+    Client_table.Key.{user_agent= "xen_api_libs/*"; host_ip= "192.168.1.1"}
+  in
+  let _ = Client_table.insert table ~client_id:full 5 in
+  let _ = Client_table.insert table ~client_id:prefix 9 in
+  let client =
+    Client_table.Key.{user_agent= "xen_api_libs/1.2"; host_ip= "192.168.1.1"}
+  in
+  Alcotest.(check (option int))
+    "prefix match is preferred over full wildcard" (Some 9)
+    (Client_table.get table ~client_id:client)
 
 let test =
   [
@@ -362,6 +396,12 @@ let test =
     )
   ; ("No spurious wildcard matches", `Quick, test_no_spurious_wildcard_matches)
   ; ("Reject all-wildcard key", `Quick, test_reject_all_wildcard_key)
+  ; ("Prefix wildcard matches", `Quick, test_prefix_wildcard_matches_prefix)
+  ; (
+      "Prefix wildcard preferred over full wildcard"
+    , `Quick
+    , test_prefix_priority_over_full_wildcard
+    )
   ; ("LRU cache overflow", `Quick, test_lru_cache_overflow)
   ]
 

@@ -12,7 +12,8 @@
  * GNU Lesser General Public License for more details.
  *)
 
-(** Key type for table lookups. Empty strings act as wildcards. *)
+(** Key type for table lookups.
+    A lone [*] is a full wildcard and a trailing [*] indicates prefix matching. *)
 module Key : sig
   type t = {user_agent: string; host_ip: string}
 
@@ -20,14 +21,15 @@ module Key : sig
 
   val matches : pattern:t -> target:t -> bool
   (** [matches ~pattern ~target] returns true if [pattern] matches [target].
-      Empty strings in [pattern] act as wildcards matching any value. *)
+      A lone [*] in [pattern] matches any value and a trailing [*] in [pattern]
+      performs prefix matching. Other fields must match exactly. *)
 
   val compare : t -> t -> int
   (** Total order: fewer wildcards first, then lexicographic by fields. *)
 end
 
 (** List of entries mapping keys to values.
-    Lookups use wildcard matching with priority: exact > host_ip only > user_agent only. *)
+    Lookups use wildcard matching with priority: exact > prefix > full wildcard. *)
 type 'a t
 
 val create : unit -> 'a t
@@ -36,7 +38,7 @@ val create : unit -> 'a t
 val insert : 'a t -> client_id:Key.t -> 'a -> bool
 (** [insert t ~client_id data] adds an entry for the given client_id.
     Returns [false] if an entry already exists for that exact key, or if
-    client_id has both fields empty (all-wildcard keys are rejected). *)
+    client_id has both fields as [*] (all-wildcard keys are rejected). *)
 
 val mem : 'a t -> client_id:Key.t -> bool
 (** [mem t ~client_id] returns whether [client_id] matches any entry
@@ -48,7 +50,7 @@ val delete : 'a t -> client_id:Key.t -> unit
 val get : 'a t -> client_id:Key.t -> 'a option
 (** [get t ~client_id] returns the value for the best matching entry,
     or [None] if no entry matches. Uses wildcard matching with priority:
-    exact > host_ip only > user_agent only. *)
+    exact > prefix > full wildcard. *)
 
 val get_exact : 'a t -> client_id:Key.t -> 'a option
 (** [get_exact t ~client_id] returns the value for the entry whose key

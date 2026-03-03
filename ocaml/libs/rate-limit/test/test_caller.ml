@@ -16,7 +16,7 @@ let test_create () =
 
 let test_add_and_mem () =
   let t = Caller.create () in
-  let ok = Caller.add_client t ~client_id:(key "curl" "") () in
+  let ok = Caller.add_client t ~client_id:(key "curl" "*") () in
   Alcotest.(check bool) "add_client succeeds" true ok ;
   Alcotest.(check bool)
     "mem finds added client" true
@@ -24,26 +24,26 @@ let test_add_and_mem () =
 
 let test_add_duplicate () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
-  let ok = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
+  let ok = Caller.add_client t ~client_id:(key "curl" "*") () in
   Alcotest.(check bool) "duplicate add fails" false ok
 
 let test_add_all_wildcard_rejected () =
   let t = Caller.create () in
-  let ok = Caller.add_client t ~client_id:(key "" "") () in
+  let ok = Caller.add_client t ~client_id:(key "*" "*") () in
   Alcotest.(check bool) "all-wildcard key rejected" false ok
 
 let test_remove_client () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
-  Caller.remove_client t ~client_id:(key "curl" "") ;
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
+  Caller.remove_client t ~client_id:(key "curl" "*") ;
   Alcotest.(check bool)
     "client removed" false
     (Caller.mem t ~client_id:(key "curl" "1.2.3.4"))
 
 let test_remove_nonexistent () =
   let t = Caller.create () in
-  Caller.remove_client t ~client_id:(key "curl" "") ;
+  Caller.remove_client t ~client_id:(key "curl" "*") ;
   Alcotest.(check pass) "removing nonexistent client does not raise" () ()
 
 let test_get_stats_empty () =
@@ -54,7 +54,7 @@ let test_get_stats_empty () =
 
 let test_get_stats_no_calls () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let stats =
     Option.get (Caller.get_stats t ~client_id:(key "curl" "1.2.3.4"))
   in
@@ -65,7 +65,7 @@ let test_get_stats_no_calls () =
 
 let test_submit_tracks_tokens () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   Caller.submit_async t ~client_id:id
     ~callback:(fun () -> ())
@@ -85,7 +85,7 @@ let test_submit_tracks_tokens () =
 
 let test_submit_sync_tracks_tokens () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   let r1 =
     Caller.submit_sync t ~client_id:id
@@ -150,7 +150,7 @@ let test_auto_add_no_rate_limiter () =
 
 let test_auto_add_matches_existing_wildcard () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   (* Submit with a specific key that matches the wildcard rule *)
   Caller.submit_async t ~client_id:(key "curl" "1.2.3.4")
     ~callback:(fun () -> ())
@@ -164,7 +164,7 @@ let test_auto_add_matches_existing_wildcard () =
     stats ;
   (* Remove the wildcard rule; if a separate exact entry had been auto-added
      for "curl"/"1.2.3.4", it would still be found after removing the wildcard *)
-  Caller.remove_client t ~client_id:(key "curl" "") ;
+  Caller.remove_client t ~client_id:(key "curl" "*") ;
   Alcotest.(check bool)
     "no separate entry was auto-added" true
     (Caller.get_stats t ~client_id:(key "curl" "1.2.3.4") = None)
@@ -175,7 +175,7 @@ let test_sliding_window_prunes_old_calls () =
   (* Use a very short 200ms window *)
   let window = Mtime.Span.of_uint64_ns 200_000_000L in
   let t = Caller.create ~window () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   Caller.submit_async t ~client_id:id
     ~callback:(fun () -> ())
@@ -200,7 +200,7 @@ let test_sliding_window_partial_expiry () =
   (* Use a 300ms window *)
   let window = Mtime.Span.of_uint64_ns 300_000_000L in
   let t = Caller.create ~window () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   (* First batch of calls *)
   Caller.submit_async t ~client_id:id
@@ -227,7 +227,7 @@ let test_sliding_window_partial_expiry () =
 
 let test_default_window_is_one_hour () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   Caller.submit_async t ~client_id:id
     ~callback:(fun () -> ())
@@ -242,17 +242,17 @@ let test_default_window_is_one_hour () =
 
 let test_set_rate_limiter () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let ok =
-    Caller.set_rate_limiter t ~client_id:(key "curl" "") ~burst_size:10.0
+    Caller.set_rate_limiter t ~client_id:(key "curl" "*") ~burst_size:10.0
       ~fill_rate:10.0
   in
   Alcotest.(check bool) "set_rate_limiter succeeds" true ok ;
-  Caller.remove_client t ~client_id:(key "curl" "")
+  Caller.remove_client t ~client_id:(key "curl" "*")
 
 let test_set_rate_limiter_nonexistent () =
   let t = Caller.create () in
-  let client_id = key "curl" "" in
+  let client_id = key "curl" "*" in
   let ok =
     Caller.set_rate_limiter t ~client_id ~burst_size:10.0 ~fill_rate:10.0
   in
@@ -262,8 +262,8 @@ let test_set_rate_limiter_nonexistent () =
 let test_remove_rate_limiter () =
   let t = Caller.create () in
   let rl = Rate_limit.create ~burst_size:10.0 ~fill_rate:10.0 in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") ~rate_limiter:rl () in
-  Caller.remove_rate_limiter t ~client_id:(key "curl" "") ;
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") ~rate_limiter:rl () in
+  Caller.remove_rate_limiter t ~client_id:(key "curl" "*") ;
   (* After removing limiter, submits should run immediately *)
   let executed = ref false in
   Caller.submit_async t ~client_id:(key "curl" "1.2.3.4")
@@ -272,12 +272,12 @@ let test_remove_rate_limiter () =
     1.0 ;
   Alcotest.(check bool)
     "callback runs immediately after limiter removed" true !executed ;
-  Caller.remove_client t ~client_id:(key "curl" "")
+  Caller.remove_client t ~client_id:(key "curl" "*")
 
 let test_submit_with_rate_limiter () =
   let t = Caller.create () in
   let rl = Rate_limit.create ~burst_size:10.0 ~fill_rate:10.0 in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") ~rate_limiter:rl () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") ~rate_limiter:rl () in
   let id = key "curl" "1.2.3.4" in
   (* Drain the bucket *)
   Caller.submit_async t ~client_id:id
@@ -300,12 +300,12 @@ let test_submit_with_rate_limiter () =
   let stats = Option.get (Caller.get_stats t ~client_id:id) in
   check_stats "rate limited calls tracked" ~call_count:2 ~tokens_consumed:15.0
     stats ;
-  Caller.remove_client t ~client_id:(key "curl" "")
+  Caller.remove_client t ~client_id:(key "curl" "*")
 
 let test_submit_sync_with_rate_limiter () =
   let t = Caller.create () in
   let rl = Rate_limit.create ~burst_size:10.0 ~fill_rate:10.0 in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") ~rate_limiter:rl () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") ~rate_limiter:rl () in
   let id = key "curl" "1.2.3.4" in
   let result =
     Caller.submit_sync t ~client_id:id
@@ -329,14 +329,14 @@ let test_submit_sync_with_rate_limiter () =
   let elapsed = Mtime.Span.to_float_ns (Mtime_clock.count start) *. 1e-9 in
   Alcotest.(check string) "sync returns after wait" "done" result2 ;
   Alcotest.(check bool) "sync blocked for tokens" true (elapsed >= 0.4) ;
-  Caller.remove_client t ~client_id:(key "curl" "")
+  Caller.remove_client t ~client_id:(key "curl" "*")
 
 (* --- Multiple clients --- *)
 
 let test_multiple_clients_independent_stats () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
-  let _ = Caller.add_client t ~client_id:(key "wget" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
+  let _ = Caller.add_client t ~client_id:(key "wget" "*") () in
   let curl_id = key "curl" "1.2.3.4" in
   let wget_id = key "wget" "1.2.3.4" in
   Caller.submit_async t ~client_id:curl_id
@@ -360,7 +360,7 @@ let test_multiple_clients_independent_stats () =
 
 let test_concurrent_submits () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   let num_threads = 10 in
   let calls_per_thread = 100 in
@@ -415,7 +415,7 @@ let test_concurrent_auto_add () =
 
 let test_on_create_not_called_for_existing_async () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   let created = ref false in
   Caller.submit_async t ~client_id:id
@@ -426,7 +426,7 @@ let test_on_create_not_called_for_existing_async () =
 
 let test_on_create_not_called_for_existing_sync () =
   let t = Caller.create () in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") () in
   let id = key "curl" "1.2.3.4" in
   let created = ref false in
   let _result =
@@ -452,9 +452,9 @@ let test_on_create_called_once_on_repeat_submit () =
 let test_remove_cleans_up_rate_limiter () =
   let t = Caller.create () in
   let rl = Rate_limit.create ~burst_size:10.0 ~fill_rate:10.0 in
-  let _ = Caller.add_client t ~client_id:(key "curl" "") ~rate_limiter:rl () in
+  let _ = Caller.add_client t ~client_id:(key "curl" "*") ~rate_limiter:rl () in
   (* remove_client should delete the rate limiter without crashing *)
-  Caller.remove_client t ~client_id:(key "curl" "") ;
+  Caller.remove_client t ~client_id:(key "curl" "*") ;
   Alcotest.(check bool)
     "client removed after cleanup" false
     (Caller.mem t ~client_id:(key "curl" "1.2.3.4"))

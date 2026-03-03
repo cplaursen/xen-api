@@ -19,25 +19,41 @@ module Key = struct
 
   let equal a b = a.user_agent = b.user_agent && a.host_ip = b.host_ip
 
-  (** Empty string acts as wildcard, matching any value *)
-  let matches ~pattern ~target =
-    (pattern.user_agent = "" || pattern.user_agent = target.user_agent)
-    && (pattern.host_ip = "" || pattern.host_ip = target.host_ip)
+  let prefix_matches ~prefix target =
+    let prefix_len = String.length prefix in
+    String.length target >= prefix_len
+    && String.equal (String.sub target 0 prefix_len) prefix
 
-  (** Priority for matching: exact (0) > host_ip only (1) > user_agent only (2) *)
-  let compare_wildcard k =
-    ( if k.user_agent = "" then
-        2
-      else
-        0
-    )
-    +
-    if k.host_ip = "" then
+  (** A lone [*] matches everything. A trailing [*] indicates prefix matching.
+      Otherwise the field must match exactly. *)
+  let field_matches ~pattern ~target =
+    let pattern_len = String.length pattern in
+    if pattern = "*" then
+      true
+    else if pattern_len > 1 && pattern.[pattern_len - 1] = '*' then
+      prefix_matches ~prefix:(String.sub pattern 0 (pattern_len - 1)) target
+    else
+      pattern = target
+
+  let matches ~pattern ~target =
+    field_matches ~pattern:pattern.user_agent ~target:target.user_agent
+    && field_matches ~pattern:pattern.host_ip ~target:target.host_ip
+
+  let wildcard_score field =
+    let field_len = String.length field in
+    if field = "*" then
+      2
+    else if field_len > 1 && field.[field_len - 1] = '*' then
       1
     else
       0
 
-  let is_all_wildcard k = k.user_agent = "" && k.host_ip = ""
+  let compare_wildcard k =
+    let user_agent_score = wildcard_score k.user_agent in
+    let host_ip_score = wildcard_score k.host_ip in
+    (user_agent_score + host_ip_score, user_agent_score, host_ip_score)
+
+  let is_all_wildcard k = k.user_agent = "*" && k.host_ip = "*"
 
   (** Total order: fewer wildcards first, then lexicographic by fields *)
   let compare a b =
@@ -64,7 +80,7 @@ let create () = Atomic.make {table= []; cache= Lru.create 100}
 
 (** Find the best matching entry for a client_id.
     List is pre-sorted by Key.compare (most specific first), so first match wins.
-    Priority: exact match > host_ip specified > user_agent specified *)
+    Priority: more specific patterns first (exact > prefix > full wildcard). *)
 let find_match {table; cache} ~client_id =
   let entry_opt = Lru.lookup cache client_id in
   match entry_opt with
@@ -90,7 +106,7 @@ let mem t ~client_id =
 let insert t ~client_id data =
   if Key.is_all_wildcard client_id then
     false
-  (* Reject keys with both fields empty *)
+  (* Reject keys with both fields full wildcards. *)
   else
     let {table; _} = Atomic.get t in
     if List.exists (fun (key, _) -> Key.equal key client_id) table then

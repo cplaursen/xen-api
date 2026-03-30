@@ -12,7 +12,7 @@
  * GNU Lesser General Public License for more details.
  *)
 
-module D = Debug.Make (struct let name = "rate_limit" end)
+module D = Debug.Make (struct let name = __MODULE__ end)
 
 type t = {
     bucket: Token_bucket.t
@@ -20,7 +20,9 @@ type t = {
       (float * (unit -> unit)) Queue.t (* contains token cost and callback *)
   ; process_queue_lock: Mutex.t
   ; worker_thread_cond: Condition.t
-  ; should_terminate: bool ref (* signal termination to worker thread *)
+  ; should_terminate: bool ref
+        (* Signal termination to worker thread. The worker thread will
+         process all remaining items in the queue before exiting. *)
   ; worker_thread: Thread.t
 }
 
@@ -52,30 +54,27 @@ let rec worker_loop ~bucket ~process_queue ~process_queue_lock
         ~should_terminate
 
 let create ~burst_size ~fill_rate =
-  match Token_bucket.create ~burst_size ~fill_rate with
-  | Some bucket ->
-      let process_queue = Queue.create () in
-      let process_queue_lock = Mutex.create () in
-      let worker_thread_cond = Condition.create () in
-      let should_terminate = ref false in
-      let worker_thread =
-        Thread.create
-          (fun () ->
-            worker_loop ~bucket ~process_queue ~process_queue_lock
-              ~worker_thread_cond ~should_terminate
-          )
-          ()
-      in
-      {
-        bucket
-      ; process_queue
-      ; process_queue_lock
-      ; worker_thread_cond
-      ; should_terminate
-      ; worker_thread
-      }
-  | None ->
-      raise (Failure "Invalid token bucket parameters")
+  let bucket = Token_bucket.create ~burst_size ~fill_rate in
+  let process_queue = Queue.create () in
+  let process_queue_lock = Mutex.create () in
+  let worker_thread_cond = Condition.create () in
+  let should_terminate = ref false in
+  let worker_thread =
+    Thread.create
+      (fun () ->
+        worker_loop ~bucket ~process_queue ~process_queue_lock
+          ~worker_thread_cond ~should_terminate
+      )
+      ()
+  in
+  {
+    bucket
+  ; process_queue
+  ; process_queue_lock
+  ; worker_thread_cond
+  ; should_terminate
+  ; worker_thread
+  }
 
 let delete data =
   with_lock data.process_queue_lock (fun () ->
@@ -84,11 +83,22 @@ let delete data =
   ) ;
   Thread.join data.worker_thread
 
+let check_not_terminated should_terminate =
+  if !should_terminate then
+    invalid_arg "Rate_limit: submit called on a deleted rate limiter"
+
 (* The callback should return quickly - if it is a longer task it is
    responsible for creating a thread to do the task *)
 let submit_async
-    ({bucket; process_queue; process_queue_lock; worker_thread_cond; _} as _data)
-    ~callback amount =
+    {
+      bucket
+    ; process_queue
+    ; process_queue_lock
+    ; worker_thread_cond
+    ; should_terminate
+    ; _
+    } ~callback amount =
+  check_not_terminated should_terminate ;
   let run_immediately =
     with_lock process_queue_lock (fun () ->
         let immediate =
@@ -104,10 +114,11 @@ let submit_async
   if run_immediately then
     callback ()
   else
-    D.debug "rate limiting sync call"
+    D.debug "%s: rate limiting call" __FUNCTION__
 
 (* Block and execute on the same thread *)
 let submit_sync bucket_data ~callback amount =
+  check_not_terminated bucket_data.should_terminate ;
   let channel_opt =
     with_lock bucket_data.process_queue_lock (fun () ->
         if

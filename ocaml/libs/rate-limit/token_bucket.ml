@@ -18,10 +18,10 @@ type t = {burst_size: float; fill_rate: float; state: state Atomic.t}
 
 let create_with_timestamp timestamp ~burst_size ~fill_rate =
   if fill_rate <= 0. then
-    None
+    invalid_arg "Token_bucket.create: fill_rate must be positive"
   else
     let state = Atomic.make {tokens= burst_size; last_refill= timestamp} in
-    Some {burst_size; fill_rate; state}
+    {burst_size; fill_rate; state}
 
 let create = create_with_timestamp (Mtime_clock.elapsed ())
 

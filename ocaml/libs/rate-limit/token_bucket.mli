@@ -18,6 +18,9 @@
     up to [burst_size]. Consumers may take tokens (if available), or query when
     enough tokens will become available.
 
+    Token counts are represented as floats rather than integers to allow
+    fractional token costs and fine-grained refill rates.
+
     Token buckets implement rate limiting by allowing operations to proceed
     only when sufficient tokens are available - otherwise, the operations can
     be delayed until enough tokens are available.
@@ -34,9 +37,9 @@
 
 type t
 
-val create : burst_size:float -> fill_rate:float -> t option
+val create : burst_size:float -> fill_rate:float -> t
 (** Create token bucket with given parameters.
-    Returns None if the fill rate is 0 or negative.
+    @raises Invalid_argument if the fill rate is 0 or negative.
     @param burst_size Maximum number of tokens that can fit in the bucket
     @param fill_rate Number of tokens added to the bucket per second
     *)
@@ -63,15 +66,18 @@ val get_delay_until_available : t -> float -> float
 *)
 
 val delay_then_consume : t -> float -> unit
+(** [delay_then_consume tb amount] sleeps the calling thread until [amount]
+    tokens are available, then consumes them. Thread-safe but does not
+    guarantee fairness between competing callers. *)
 
 (**/**)
 
 (* Fuctions accepting a timestamp are meant for testing only *)
 
 val create_with_timestamp :
-  Mtime.span -> burst_size:float -> fill_rate:float -> t option
-(** Create token bucket with given parameters and supplied inital timestamp
-    Returns None if the fill_rate is 0 or negative.
+  Mtime.span -> burst_size:float -> fill_rate:float -> t
+(** Create token bucket with given parameters and supplied inital timestamp.
+    @raises Invalid_argument if the fill_rate is 0 or negative.
     @param timestamp Initial timestamp
     @param burst_size Maximum number of tokens that can fit in the bucket
     @param fill_rate Number of tokens added to the bucket per second

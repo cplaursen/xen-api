@@ -20,14 +20,17 @@ type t
 
 val create : burst_size:float -> fill_rate:float -> t
 (** [create ~burst_size ~fill_rate] creates a new rate limiter with the given
-    token bucket parameters. Raises [Failure] if the parameters are invalid
+    token bucket parameters.
+    @raises Invalid_argument if the parameters are invalid
     (e.g. non-positive fill rate).
     @param burst_size Maximum number of tokens in the bucket
     @param fill_rate Number of tokens added per second *)
 
 val delete : t -> unit
-(** [delete t] signals the worker thread to terminate and waits for it to
-    finish processing any remaining queued callbacks. *)
+(** [delete t] signals the worker thread to terminate. The worker thread
+    processes any remaining queued callbacks, then exits. Blocks the caller
+    until the worker thread has finished. Subsequent calls to [submit_async]
+    or [submit_sync] will raise [Invalid_argument]. *)
 
 val submit_async : t -> callback:(unit -> unit) -> float -> unit
 (** [submit_async t ~callback amount] submits a callback under rate limiting.

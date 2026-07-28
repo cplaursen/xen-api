@@ -1488,6 +1488,44 @@ let create_metadata ~__context ~self =
   ; domains
   }
 
+(* Check if all VGPUs has related PCI card, otherwise it means
+   we are in the middle of an update *)
+let check_metadata_vgpus (md : Metadata.t) =
+  let pcis = Hashtbl.create (List.length md.pcis) in
+  let open Xenops_interface.Pci in
+  List.iter (fun pci -> Hashtbl.add pcis pci.address ()) md.pcis ;
+  let open Xenops_interface.Vgpu in
+  List.for_all
+    (fun vgpu ->
+      match vgpu.virtual_pci_address with
+      | Some address ->
+          if Hashtbl.mem pcis address then (
+            Hashtbl.remove pcis address ;
+            true
+          ) else
+            false
+      | None ->
+          true
+    )
+    md.vgpus
+
+let create_metadata_txt ~__context ~self =
+  let rec create_metadata_txt_retries ~__context ~self num_retries =
+    if num_retries <= 0 then
+      raise
+        (Xenopsd_error (Internal_error "Tried too many times to create metadata")
+        ) ;
+    let md = create_metadata ~__context ~self in
+    if check_metadata_vgpus md then
+      md |> rpc_of Metadata.t |> Jsonrpc.to_string
+    else (
+      debug "create_metadata retrying" ;
+      Unix.sleepf 0.2 ;
+      create_metadata_txt_retries ~__context ~self (num_retries - 1)
+    )
+  in
+  create_metadata_txt_retries ~__context ~self 3
+
 let id_of_vm ~__context ~self = Db.VM.get_uuid ~__context ~self
 
 let vm_of_id ~__context uuid = Db.VM.get_by_uuid ~__context ~uuid
@@ -1730,8 +1768,7 @@ module Xenopsd_metadata = struct
   let push ~__context ~self =
     let@ __context = Context.with_tracing ~__context __FUNCTION__ in
     with_lock metadata_m (fun () ->
-        let md = create_metadata ~__context ~self in
-        let txt = md |> rpc_of Metadata.t |> Jsonrpc.to_string in
+        let txt = create_metadata_txt ~__context ~self in
         info "xenops: VM.import_metadata %s" txt ;
         let dbg = Context.string_of_task_and_tracing __context in
         let module Client =
@@ -1811,11 +1848,7 @@ module Xenopsd_metadata = struct
     with_lock metadata_m (fun () ->
         let dbg = Context.string_of_task_and_tracing __context in
         if vm_exists_in_xenopsd queue_name dbg id then
-          let txt =
-            create_metadata ~__context ~self
-            |> rpc_of Metadata.t
-            |> Jsonrpc.to_string
-          in
+          let txt = create_metadata_txt ~__context ~self in
           if Xapi_cache.update_if_changed id txt then (
             debug "VM %s metadata has changed: updating xenopsd" id ;
             info "xenops: VM.import_metadata %s" txt ;

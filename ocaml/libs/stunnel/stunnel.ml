@@ -264,44 +264,68 @@ let config_file ?(accept = None) config host port =
 
 let ignore_exn f x = try f x with _ -> ()
 
+(* An stunnel child only exits once every copy of its stdio socketpair has been
+   closed. One end of that pair is handed to a peer process over SCM_RIGHTS, so
+   a peer that has stopped servicing it - a device model wedged part-way
+   through a migration, say - keeps the child alive indefinitely. Waiting for
+   such a child with no bound costs the caller its thread for the lifetime of
+   the daemon, and the task it was running can never complete or be cancelled
+   (XSI-2364). Wait this long instead, then kill the child. *)
+let disconnect_wait_timeout = ref 30.
+
+(* How long to wait for a child to be reaped once it has been SIGKILLed. *)
+let disconnect_kill_timeout = ref 5.
+
+(* [reap_within nohang timeout] polls [nohang] until the child is reaped or
+   [timeout] elapses. Returns the waitpid result; a pid of 0 means the child is
+   still running, following the convention of [Forkhelpers.waitpid_nohang].
+
+   The first poll happens before any sleep and the backoff starts short, so a
+   child that exits promptly - which is every child but the pathological one
+   this bound exists for - is reaped as quickly as a blocking wait would. *)
+let reap_within nohang timeout =
+  let deadline = Unix.gettimeofday () +. timeout in
+  let rec poll delay =
+    match nohang () with
+    | 0, _ when Unix.gettimeofday () < deadline ->
+        Unix.sleepf delay ;
+        poll (Float.min (delay *. 2.) 0.1)
+    | res ->
+        res
+  in
+  poll 0.001
+
 let disconnect_with_pid ?(wait = true) ?(force = false) pid =
-  let do_disc waiter pid =
-    let res =
-      try waiter ()
+  let do_disc nohang pid =
+    let nohang () =
+      try nohang ()
       with Unix.Unix_error (Unix.ECHILD, _, _) -> (pid, Unix.WEXITED 0)
     in
+    let res =
+      if wait then
+        reap_within nohang !disconnect_wait_timeout
+      else
+        nohang ()
+    in
     match res with
-    | 0, _ when force -> (
-      try Unix.kill pid Sys.sigkill
-      with Unix.Unix_error (Unix.ESRCH, _, _) -> ()
-    )
+    | 0, _ when force || wait ->
+        (* Either the caller asked us to force the issue, or we waited and the
+           child outlived the timeout. In both cases killing it is the only way
+           to release the caller. *)
+        ignore_exn (Unix.kill pid) Sys.sigkill ;
+        (* A killed child is reaped promptly, so this second wait is bounded
+           even when the first one timed out. *)
+        ignore (reap_within nohang !disconnect_kill_timeout)
     | _ ->
         ()
   in
   match pid with
   | FEFork fpid ->
-      let pid_int = Forkhelpers.getpid fpid in
       do_disc
-        (fun () ->
-          ( if wait then
-              Forkhelpers.waitpid
-            else
-              Forkhelpers.waitpid_nohang
-          )
-            fpid
-        )
-        pid_int
+        (fun () -> Forkhelpers.waitpid_nohang fpid)
+        (Forkhelpers.getpid fpid)
   | StdFork pid ->
-      do_disc
-        (fun () ->
-          ( if wait then
-              Unix.waitpid []
-            else
-              Unix.waitpid [Unix.WNOHANG]
-          )
-            pid
-        )
-        pid
+      do_disc (fun () -> Unix.waitpid [Unix.WNOHANG] pid) pid
   | Nopid ->
       ()
 

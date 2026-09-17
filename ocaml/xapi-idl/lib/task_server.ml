@@ -319,6 +319,12 @@ functor
           task.cancellable <- false
       )
 
+    (* Undo [prohibit_cancellation]. A task is only uncancellable for the
+       length of the operation that asked for it; leaving it that way for the
+       rest of the task's life means a later failure can never be aborted. *)
+    let permit_cancellation task =
+      with_lock task.tm (fun () -> task.cancellable <- true)
+
     let destroy_on_finish t =
       t.destroy_on_finish <- true ;
       let already_finished =

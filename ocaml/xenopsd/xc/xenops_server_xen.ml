@@ -2898,8 +2898,17 @@ module VM = struct
                     (Xenopsd_error
                        (Failed_to_suspend (vm.Vm.id, suspend_timeout))
                     )
-                else
-                  debug "VM = %s; domid = %d; Domain suspended" vm.Vm.id domid
+                else (
+                  debug "VM = %s; domid = %d; Domain suspended" vm.Vm.id domid ;
+                  (* The domain is down, so the thing cancellation was
+                     prohibited to protect - a cancel arriving part-way through
+                     the suspend - can no longer happen. What follows is the
+                     emulators' turn, and cancelling that is precisely what
+                     Emu_manager's abort exists for. Leaving the task
+                     uncancellable across it means a device model that stops
+                     answering can never be aborted. *)
+                  Xenops_task.permit_cancellation task
+                )
             ) ;
             (* Record the final memory usage of the domain so we know how much
                to allocate for the resume *)

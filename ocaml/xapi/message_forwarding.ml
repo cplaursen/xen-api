@@ -1554,6 +1554,35 @@ functor
               ()
           )
 
+      (* Allocating an SR-IOV vGPU on a migration's destination points
+         VGPU.PCI at a VF there before the VM has moved. If the migration
+         fails with the VM still on its source, point VGPU.PCI back at the VF
+         it holds: otherwise that VF looks like plain PCI passthrough and the
+         VM can no longer be migrated or suspended. *)
+      let with_vgpu_pcis_restored_on_failure ~__context ~vm f =
+        let source = Db.VM.get_resident_on ~__context ~self:vm in
+        let vgpu_pcis =
+          Db.VM.get_VGPUs ~__context ~self:vm
+          |> List.map (fun vgpu -> (vgpu, Db.VGPU.get_PCI ~__context ~self:vgpu))
+        in
+        try f ()
+        with e ->
+          Backtrace.is_important e ;
+          log_and_ignore_exn (fun () ->
+              if Db.VM.get_resident_on ~__context ~self:vm = source then
+                List.iter
+                  (fun (vgpu, pci) ->
+                    if Db.VGPU.get_PCI ~__context ~self:vgpu <> pci then (
+                      debug "%s: restoring PCI %s of VGPU %s for VM %s"
+                        __FUNCTION__ (Ref.string_of pci) (Ref.string_of vgpu)
+                        (Ref.string_of vm) ;
+                      Db.VGPU.set_PCI ~__context ~self:vgpu ~value:pci
+                    )
+                  )
+                  vgpu_pcis
+          ) ;
+          raise e
+
       (* Notes on memory checking/reservation logic:
          When computing the hosts free memory we consider all VMs resident_on (ie running
          and consuming resources NOW) and scheduled_to_be_resident_on (ie those which are
@@ -2634,11 +2663,13 @@ functor
                 ) ;
             (* Make sure the target has enough memory to receive the VM *)
             let snapshot = Db.VM.get_record ~__context ~self:vm in
-            reserve_memory_for_vm ~__context ~vm ~host ~snapshot
-              ~host_op:`vm_migrate (fun () ->
-                if Db.VM.get_VGPUs ~__context ~self:vm <> [] then
-                  Xapi_stats.incr_pool_vgpu_migration_count () ;
-                forward_vm_op ~local_fn ~__context ~vm ~remote_fn
+            with_vgpu_pcis_restored_on_failure ~__context ~vm (fun () ->
+                reserve_memory_for_vm ~__context ~vm ~host ~snapshot
+                  ~host_op:`vm_migrate (fun () ->
+                    if Db.VM.get_VGPUs ~__context ~self:vm <> [] then
+                      Xapi_stats.incr_pool_vgpu_migration_count () ;
+                    forward_vm_op ~local_fn ~__context ~vm ~remote_fn
+                )
             )
         ) ;
         let message_body =
@@ -2755,13 +2786,15 @@ functor
                     clear_reservations ~__context ~vm
                 )
               in
-              finally
-                (fun () ->
-                  allocate_vm_to_host ~__context ~vm ~host ~snapshot
-                    ~host_op:`vm_migrate () ;
-                  forward_internal_async ()
-                )
-                clear_migrate_op
+              with_vgpu_pcis_restored_on_failure ~__context ~vm (fun () ->
+                  finally
+                    (fun () ->
+                      allocate_vm_to_host ~__context ~vm ~host ~snapshot
+                        ~host_op:`vm_migrate () ;
+                      forward_internal_async ()
+                    )
+                    clear_migrate_op
+              )
         in
         let result =
           with_vm_operation ~__context ~self:vm ~doc:"VM.migrate_send"

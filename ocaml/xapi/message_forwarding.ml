@@ -1558,12 +1558,21 @@ functor
          VGPU.PCI at a VF there before the VM has moved. If the migration
          fails with the VM still on its source, point VGPU.PCI back at the VF
          it holds: otherwise that VF looks like plain PCI passthrough and the
-         VM can no longer be migrated or suspended. *)
+         VM can no longer be migrated or suspended.
+         A VM that has completed a migration no longer holds its old VF
+         (pool_migrate_complete releases it), which also covers a failure
+         after a localhost migration, where resident_on does not change. If
+         the migration completes after this has run, pool_migrate_complete
+         takes VGPU.PCI from xenopsd on the destination. *)
       let with_vgpu_pcis_restored_on_failure ~__context ~vm f =
         let source = Db.VM.get_resident_on ~__context ~self:vm in
         let vgpu_pcis =
           Db.VM.get_VGPUs ~__context ~self:vm
           |> List.map (fun vgpu -> (vgpu, Db.VGPU.get_PCI ~__context ~self:vgpu))
+        in
+        let still_held pci =
+          Db.is_valid_ref __context pci
+          && List.mem vm (Db.PCI.get_attached_VMs ~__context ~self:pci)
         in
         try f ()
         with e ->
@@ -1572,7 +1581,10 @@ functor
               if Db.VM.get_resident_on ~__context ~self:vm = source then
                 List.iter
                   (fun (vgpu, pci) ->
-                    if Db.VGPU.get_PCI ~__context ~self:vgpu <> pci then (
+                    if
+                      Db.VGPU.get_PCI ~__context ~self:vgpu <> pci
+                      && still_held pci
+                    then (
                       debug "%s: restoring PCI %s of VGPU %s for VM %s"
                         __FUNCTION__ (Ref.string_of pci) (Ref.string_of vgpu)
                         (Ref.string_of vm) ;
